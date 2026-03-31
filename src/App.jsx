@@ -1,7 +1,12 @@
-﻿import React from "react";
+﻿
+import React from "react";
 import {
+  benchItems,
   dashboardStats,
-  navItems
+  logs,
+  matches,
+  navItems,
+  vacancies
 } from "./data";
 
 const iconPaths = {
@@ -15,7 +20,6 @@ const iconPaths = {
   gear: "M12 3l1 2.2l2.4.6l-.5 2.4l1.7 1.7l-1.7 1.7l.5 2.4l-2.4.6L12 21l-1-2.2l-2.4-.6l.5-2.4L7.4 14l1.7-1.7l-.5-2.4l2.4-.6zM12 9a3 3 0 1 0 0 6a3 3 0 0 0 0-6z"
 };
 
-const miniNav = ["◌", "◍", "◼", "◎", "◀", "◊", "○", "◉", "◆", "✦"];
 const initialTheme = "light";
 const initialCollections = {
   inbox: [],
@@ -79,8 +83,6 @@ const keywordStopwords = new Set([
   "has",
   "the",
   "and",
-  "или",
-  "для",
   "опыт",
   "лет",
   "год",
@@ -107,60 +109,87 @@ function extractKeywords(value) {
     .filter((word) => !keywordStopwords.has(word));
 }
 
-function buildManualMatchResult(vacancyText, benchText) {
-  const vacancyKeywords = extractKeywords(vacancyText);
-  const benchKeywords = extractKeywords(benchText);
+function buildRunCorpus(mode) {
+  if (mode === "bench") {
+    return benchItems.map((item) => ({
+      id: item[0],
+      title: item[0],
+      subtitle: `${item[2]} • ${item[4]}`,
+      meta: item[3],
+      tags: item[1],
+      kindLabel: "Бенч",
+      searchableText: [item[0], item[1].join(" "), item[2], item[3], item[4], item[5], item[6]].join(" ")
+    }));
+  }
 
-  if (!vacancyText.trim() || !benchText.trim()) {
+  return vacancies.map((item) => ({
+    id: item[0],
+    title: item[0],
+    subtitle: `${item[2]} • ${item[4]}`,
+    meta: item[3],
+    tags: item[1],
+    kindLabel: "Вакансия",
+    searchableText: [item[0], item[1].join(" "), item[2], item[3], item[4], item[5]].join(" ")
+  }));
+}
+
+function buildManualRunResult(queryText, mode) {
+  if (!queryText.trim()) {
     return {
-      title: "Недостаточно данных",
-      description: "Заполните оба поля: текст вакансии и текст бенча.",
-      overlap: [],
-      score: 0
+      title: "Нет текста для анализа",
+      description: "Вставьте описание вакансии или бенча, чтобы получить релевантную выдачу.",
+      items: []
     };
   }
 
-  if (!vacancyKeywords.length || !benchKeywords.length) {
+  const queryKeywords = extractKeywords(queryText);
+  if (!queryKeywords.length) {
     return {
       title: "Ключевые слова не выделены",
-      description: "Добавьте больше фактуры: стек, грейд, домен, формат работы и вилку.",
-      overlap: [],
-      score: 0
+      description: "Добавьте больше деталей: стек, грейд, домен, локацию, формат работы и ставку.",
+      items: []
     };
   }
 
-  const vacancySet = new Set(vacancyKeywords);
-  const benchSet = new Set(benchKeywords);
-  const overlap = [...vacancySet].filter((word) => benchSet.has(word));
+  const querySet = new Set(queryKeywords);
+  const ranked = buildRunCorpus(mode)
+    .map((item) => {
+      const targetKeywords = extractKeywords(item.searchableText);
+      const targetSet = new Set(targetKeywords);
+      const overlap = [...querySet].filter((word) => targetSet.has(word));
+      const score = targetSet.size
+        ? Math.round((overlap.length / querySet.size) * 70 + (overlap.length / targetSet.size) * 30)
+        : 0;
 
-  const vacancyCoverage = overlap.length / vacancySet.size;
-  const benchCoverage = overlap.length / benchSet.size;
-  const score = Math.round((vacancyCoverage * 0.7 + benchCoverage * 0.3) * 100);
-
-  let verdict = "Низкая релевантность";
-  if (score >= 75) verdict = "Высокая релевантность";
-  else if (score >= 50) verdict = "Средняя релевантность";
-
-  const overlapPreview = overlap.slice(0, 10).join(", ");
-  const description = overlap.length
-    ? `Общие ключевые слова: ${overlapPreview}${overlap.length > 10 ? "..." : ""}.`
-    : "Пересечений по ключевым словам не найдено.";
+      return {
+        ...item,
+        score,
+        overlap
+      };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 
   return {
-    title: `${verdict}: ${score}%`,
-    description,
-    overlap,
-    score
+    title: mode === "bench" ? "Топ бенчей" : "Топ вакансий",
+    description: ranked.length
+      ? "Показаны самые релевантные записи по ключевым словам."
+      : "Подходящих записей по текущему тексту не найдено.",
+    items: ranked
   };
+}
+
+function buildActivitySeries(seed, modifier) {
+  return [0, 0, 0, 0, 0, 0, 0].map((_, index) => Math.max(0, Math.round(seed * modifier[index])));
 }
 
 function App() {
   const [path, setPath] = React.useState(window.location.pathname);
   const [theme, setTheme] = React.useState(initialTheme);
-  const [notice, setNotice] = React.useState("Интерфейс загружен. Все кнопки готовы к работе.");
   const [collections, setCollections] = React.useState(initialCollections);
-  const [runVacancyText, setRunVacancyText] = React.useState("");
-  const [runBenchText, setRunBenchText] = React.useState("");
+  const [runText, setRunText] = React.useState("");
+  const [runMode, setRunMode] = React.useState("bench");
   const [runResult, setRunResult] = React.useState(null);
   const [matchesSortOrder, setMatchesSortOrder] = React.useState("desc");
   const [settings, setSettings] = React.useState(defaultSettings);
@@ -184,45 +213,21 @@ function App() {
     return copy;
   }, [collections.matches, matchesSortOrder]);
 
-  const showNotice = (message) => setNotice(message);
-
   const navigate = (nextPath) => {
-    if (nextPath === window.location.pathname) {
-      showNotice("Вы уже на этой странице.");
-      return;
-    }
+    if (nextPath === window.location.pathname) return;
     window.history.pushState({}, "", nextPath);
     setPath(nextPath);
-    showNotice("Переход выполнен.");
   };
 
   const clearAllResults = React.useCallback(() => {
     setCollections(emptyCollections);
     setRunResult(null);
-    showNotice("Результаты очищены.");
   }, []);
 
   const applyTheme = (nextTheme) => {
     setTheme(nextTheme);
     setSettingsTheme(nextTheme);
-    showNotice(nextTheme === "dark" ? "Включена темная тема." : "Включена светлая тема.");
   };
-
-  const railActions = React.useMemo(
-    () => [
-      { label: "Дашборд", onClick: () => navigate("/") },
-      { label: "Входящие", onClick: () => navigate("/inbox") },
-      { label: "Вакансии", onClick: () => navigate("/vacancies") },
-      { label: "Бенч", onClick: () => navigate("/bench") },
-      { label: "Совпадения", onClick: () => navigate("/matches") },
-      { label: "Ручной прогон", onClick: () => navigate("/process") },
-      { label: "Логи", onClick: () => navigate("/logs") },
-      { label: "Настройки", onClick: () => navigate("/settings") },
-      { label: "Очистить", onClick: clearAllResults },
-      { label: "Светлая тема", onClick: () => applyTheme(theme === "dark" ? "light" : "dark") }
-    ],
-    [clearAllResults, theme]
-  );
 
   const dashboardStatsView = dashboardStats.map((stat, index) => ({
     ...stat,
@@ -236,6 +241,9 @@ function App() {
     matches: collections.matches.length,
     logs: collections.logs.length
   };
+  const activityLabels = ["25.03", "26.03", "27.03", "28.03", "29.03", "30.03", "31.03"];
+  const benchActivity = buildActivitySeries(collections.bench.length, [0.4, 0.6, 0.8, 0.7, 1, 0.5, 0.9]);
+  const vacancyActivity = buildActivitySeries(collections.vacancies.length, [0.6, 0.5, 0.7, 0.9, 0.8, 0.6, 1]);
 
   const handlePageRefresh = (pageName) => {
     if (pageName === "run") {
@@ -243,7 +251,6 @@ function App() {
     } else {
       setCollections((prev) => ({ ...prev, [pageName]: initialCollections[pageName] }));
     }
-    showNotice("Страница обновлена.");
   };
 
   const handleSearch = (pageName, rawFilters) => {
@@ -251,32 +258,16 @@ function App() {
     const source = initialCollections[pageName];
 
     if (!source) {
-      showNotice("Для этой страницы поиск не настроен.");
       return;
     }
 
     const filtered = filters.length ? source.filter((item) => itemContainsFilters(item, filters)) : source;
     setCollections((prev) => ({ ...prev, [pageName]: filtered }));
-    showNotice(
-      filters.length
-        ? filtered.length
-          ? `Найдено записей: ${filtered.length}.`
-          : "По запросу ничего не найдено."
-        : "Фильтры очищены. Показаны все записи."
-    );
-  };
-
-  const handleRunExample = (kind) => {
-    if (kind === "vacancy") setRunVacancyText(exampleTexts.vacancy);
-    if (kind === "bench") setRunBenchText(exampleTexts.bench);
-    setRunResult(null);
-    showNotice(kind === "vacancy" ? "Подставлен пример вакансии." : "Подставлен пример бенча.");
   };
 
   const handleRunProcess = () => {
-    const result = buildManualMatchResult(runVacancyText, runBenchText);
+    const result = buildManualRunResult(runText, runMode);
     setRunResult(result);
-    showNotice(result.score ? `Ручной прогон завершен. Релевантность: ${result.score}%.` : "Ручной прогон завершен.");
   };
 
   const handleMatchAction = (action, matchTitle) => {
@@ -284,7 +275,6 @@ function App() {
       ...prev,
       matches: prev.matches.filter((item) => item.title !== matchTitle)
     }));
-    showNotice(action === "approve" ? "Совпадение подтверждено и убрано из списка." : "Совпадение отклонено и убрано из списка.");
   };
 
   const handleSettingsChange = (key, value) => {
@@ -293,52 +283,26 @@ function App() {
 
   const handleSettingsSave = () => {
     setTheme(settingsTheme);
-    showNotice("Настройки сохранены.");
   };
 
   const handleSettingsReset = () => {
     setSettings(defaultSettings);
     setSettingsTheme(initialTheme);
     setTheme(initialTheme);
-    showNotice("Настройки сброшены к значениям по умолчанию.");
   };
 
   const handleRowAction = (kind, label) => {
-    const messages = {
-      inbox: `Открыт источник сообщения: ${label}.`,
-      vacancies: `Показаны детали вакансии: ${label}.`,
-      bench: `Показан профиль специалиста: ${label}.`,
-      logs: `Показана запись лога: ${label}.`
-    };
-    showNotice(messages[kind] ?? "Действие выполнено.");
+    return { kind, label };
   };
 
   return (
     <div className="app-shell">
-      <aside className="rail">
-        <div className="rail__spacer" />
-        <div className="rail__icons">
-          {miniNav.map((symbol, index) => (
-            <button
-              key={index}
-              className="rail__icon"
-              type="button"
-              title={railActions[index].label}
-              onClick={railActions[index].onClick}
-            >
-              {symbol}
-            </button>
-          ))}
-        </div>
-        <div className="rail__footer">GX</div>
-      </aside>
-
       <aside className="sidebar">
         <div className="brand">
           <div className="brand__mark">⚡</div>
           <div>
             <div className="brand__title">Matcher</div>
-            <div className="brand__subtitle">Bench & Vacancy</div>
+            <div className="brand__subtitle">Recruiting Platform</div>
           </div>
         </div>
 
@@ -388,11 +352,21 @@ function App() {
 
       <main className="content">
         <TopBar
-          notice={notice}
           onClear={clearAllResults}
           onToggleTheme={() => applyTheme(theme === "dark" ? "light" : "dark")}
         />
-        {current.id === "dashboard" && <DashboardPage navigate={navigate} stats={dashboardStatsView} matches={sortedMatches} />}
+        {current.id === "dashboard" && (
+          <DashboardPage
+            navigate={navigate}
+            stats={dashboardStatsView}
+            matches={sortedMatches}
+            inboxCount={statsByPage.inbox}
+            logsCount={statsByPage.logs}
+            benchActivity={benchActivity}
+            vacancyActivity={vacancyActivity}
+            activityLabels={activityLabels}
+          />
+        )}
         {current.id === "inbox" && (
           <InboxPage
             items={collections.inbox}
@@ -431,17 +405,14 @@ function App() {
         )}
         {current.id === "run" && (
           <RunPage
-            vacancyText={runVacancyText}
-            benchText={runBenchText}
+            mode={runMode}
+            value={runText}
             result={runResult}
-            onVacancyChange={setRunVacancyText}
-            onBenchChange={setRunBenchText}
-            onExample={handleRunExample}
+            onModeChange={setRunMode}
+            onChange={setRunText}
             onClear={() => {
-              setRunVacancyText("");
-              setRunBenchText("");
+              setRunText("");
               setRunResult(null);
-              showNotice("Поля ручного прогона очищены.");
             }}
             onProcess={handleRunProcess}
           />
@@ -470,7 +441,7 @@ function App() {
   );
 }
 
-function TopBar({ notice, onClear, onToggleTheme }) {
+function TopBar({ onClear, onToggleTheme }) {
   return (
     <header className="topbar topbar--stacked">
       <div className="topbar__row">
@@ -484,17 +455,16 @@ function TopBar({ notice, onClear, onToggleTheme }) {
           </button>
         </div>
       </div>
-      <div className="status-banner">{notice}</div>
     </header>
   );
 }
 
-function DashboardPage({ navigate, stats, matches }) {
+function DashboardPage({ navigate, stats, matches, inboxCount, logsCount, benchActivity, vacancyActivity, activityLabels }) {
   return (
     <section className="page">
       <PageHeading
         title="Дашборд"
-        subtitle="Краткий обзор статуса матчинг-системы"
+        subtitle="Обзор активности системы рекрутинга"
         actionLabel="Открыть входящие"
         onAction={() => navigate("/inbox")}
       />
@@ -507,6 +477,34 @@ function DashboardPage({ navigate, stats, matches }) {
           </article>
         ))}
       </div>
+
+      <div className="micro-stat-grid">
+        <article className="micro-stat-card">
+          <span className="micro-stat-card__icon">◫</span>
+          <div>
+            <div className="micro-stat-card__label">Активных чатов</div>
+            <strong>{inboxCount}</strong>
+          </div>
+        </article>
+        <article className="micro-stat-card">
+          <span className="micro-stat-card__icon">◌</span>
+          <div>
+            <div className="micro-stat-card__label">Ожидают проверки</div>
+            <strong>{matches.length}</strong>
+          </div>
+        </article>
+        <article className="micro-stat-card">
+          <span className="micro-stat-card__icon">△</span>
+          <div>
+            <div className="micro-stat-card__label">Логов обработки</div>
+            <strong>{logsCount}</strong>
+          </div>
+        </article>
+      </div>
+
+      <Panel title="Активность за неделю" subtitle="">
+        <ActivityChart labels={activityLabels} benchValues={benchActivity} vacancyValues={vacancyActivity} />
+      </Panel>
 
       <div className="dashboard-grid">
         <Panel title="Последние совпадения" subtitle="Новые релевантные пары">
@@ -727,84 +725,118 @@ function MatchesPage({ items, sortOrder, onSortChange, onRefresh, onAction }) {
   );
 }
 
-function RunPage({
-  vacancyText,
-  benchText,
-  result,
-  onVacancyChange,
-  onBenchChange,
-  onExample,
-  onClear,
-  onProcess
-}) {
+function RunPage({ mode, value, result, onModeChange, onChange, onClear, onProcess }) {
   return (
     <section className="page">
-      <PageHeading title="Ручной прогон" subtitle="Сравнение бенча и вакансии с выделением ключевых слов" />
+      <PageHeading title="Ручной прогон" subtitle="Вставьте текст и получите топ релевантной выдачи с противоположной стороны" />
       <div className="split-grid">
         <Panel title="Входные данные" subtitle="">
           <div className="panel-actions">
-            <button className="ghost-tab" type="button" onClick={() => onExample("vacancy")}>
-              Пример вакансии
+            <button className={`ghost-tab ${mode === "bench" ? "is-active" : ""}`} type="button" onClick={() => onModeChange("bench")}>
+              Вакансия → бенчи
             </button>
-            <button className="ghost-tab" type="button" onClick={() => onExample("bench")}>
-              Пример бенча
+            <button className={`ghost-tab ${mode === "vacancy" ? "is-active" : ""}`} type="button" onClick={() => onModeChange("vacancy")}>
+              Бенч → вакансии
             </button>
           </div>
-          <div className="manual-input-grid">
-            <div>
-              <div className="input-label">Текст вакансии</div>
-              <textarea
-                className="editor editor--compact"
-                value={vacancyText}
-                onChange={(event) => onVacancyChange(event.target.value)}
-                placeholder="Вставьте описание вакансии..."
-              />
-            </div>
-            <div>
-              <div className="input-label">Текст бенча</div>
-              <textarea
-                className="editor editor--compact"
-                value={benchText}
-                onChange={(event) => onBenchChange(event.target.value)}
-                placeholder="Вставьте описание специалиста..."
-              />
-            </div>
-          </div>
+
+          <div className="input-label">{mode === "bench" ? "Текст вакансии" : "Текст бенча"}</div>
+          <textarea
+            className="editor"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder={mode === "bench" ? "Вставьте описание вакансии..." : "Вставьте описание специалиста..."}
+          />
+
           <div className="editor-footer">
             <button className="btn btn--ghost" type="button" onClick={onClear}>
               Очистить
             </button>
             <button className="btn btn--primary" type="button" onClick={onProcess}>
-              Сравнить
+              Найти топ
             </button>
           </div>
         </Panel>
 
         <Panel title="Результат" subtitle="">
           {result ? (
-            <div className="result-card">
-              <div className="result-card__title">{result.title}</div>
-              <p>{result.description}</p>
-              {result.overlap?.length ? (
-                <div className="tag-list">
-                  {result.overlap.slice(0, 12).map((word) => (
-                    <Badge key={word} tone="blue">
-                      {word}
-                    </Badge>
-                  ))}
-                </div>
+            <div className="run-results">
+              <div className="result-card result-card--summary">
+                <div className="result-card__title">{result.title}</div>
+                <p>{result.description}</p>
+              </div>
+              {result.items.length ? (
+                result.items.map((item) => (
+                  <article key={item.id} className="run-result-item">
+                    <div className="run-result-item__head">
+                      <div>
+                        <div className="run-result-item__title">{item.title}</div>
+                        <div className="cell-subtitle">{item.subtitle}</div>
+                      </div>
+                      <Badge tone="purple">{item.score}%</Badge>
+                    </div>
+                    <div className="run-result-item__meta">
+                      <span>{item.kindLabel}</span>
+                      <span>{item.meta}</span>
+                    </div>
+                    <TagList items={item.tags} />
+                    {item.overlap.length ? (
+                      <div className="run-result-item__footer">
+                        <span>Совпало:</span>
+                        <div className="tag-list">
+                          {item.overlap.slice(0, 6).map((word) => (
+                            <Badge key={word} tone="blue">{word}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                ))
               ) : null}
             </div>
           ) : (
             <div className="empty-state">
               <div className="empty-state__icon">⚡</div>
-              <p>Добавьте вакансию и бенч, затем запустите сравнение.</p>
+              <p>Вставьте текст и запустите ручной прогон, чтобы увидеть топ выдачи.</p>
             </div>
           )}
         </Panel>
       </div>
       <footer className="page-footer">© 2026 ООО "Пятый элемент". Все права защищены.</footer>
     </section>
+  );
+}
+
+function ActivityChart({ labels, benchValues, vacancyValues }) {
+  const maxValue = Math.max(1, ...benchValues, ...vacancyValues);
+  const chartHeight = 180;
+  const hasActivity = [...benchValues, ...vacancyValues].some((value) => value > 0);
+  const benchPoints = benchValues
+    .map((value, index) => `${(index / (benchValues.length - 1 || 1)) * 100},${chartHeight - (value / maxValue) * chartHeight}`)
+    .join(" ");
+  const vacancyPoints = vacancyValues
+    .map((value, index) => `${(index / (vacancyValues.length - 1 || 1)) * 100},${chartHeight - (value / maxValue) * chartHeight}`)
+    .join(" ");
+
+  return (
+    <div className="activity-chart">
+      <svg viewBox={`0 0 100 ${chartHeight}`} preserveAspectRatio="none" aria-hidden="true">
+        {[0, 1, 2, 3, 4].map((step) => (
+          <line key={step} x1="0" y1={(chartHeight / 4) * step} x2="100" y2={(chartHeight / 4) * step} />
+        ))}
+        {hasActivity ? <polyline className="activity-chart__line activity-chart__line--bench" points={benchPoints} /> : null}
+        {hasActivity ? <polyline className="activity-chart__line activity-chart__line--vacancy" points={vacancyPoints} /> : null}
+      </svg>
+      <div className="activity-chart__labels">
+        {labels.map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+      <div className="activity-chart__legend">
+        <Badge tone="blue">Бенч</Badge>
+        <Badge tone="purple">Вакансии</Badge>
+      </div>
+    </div>
   );
 }
 
@@ -885,7 +917,7 @@ function SettingsPage({ settings, theme, onThemeChange, onSettingsChange, onSave
           </div>
         </Panel>
 
-        <Panel title="Параметры матчинга" subtitle="Настройка алгоритма поиска совпадений">
+        <Panel title="Параметры рекрутинга" subtitle="Настройка алгоритма подбора совпадений">
           <div className="form-grid form-grid--single">
             <Field
               label="Минимальный порог релевантности (%)"
@@ -1055,5 +1087,3 @@ function Icon({ name }) {
 }
 
 export default App;
-
-

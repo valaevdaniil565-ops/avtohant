@@ -64,53 +64,7 @@ button:hover {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 34px 206px 1fr;
-}
-
-.rail {
-  border-right: 1px solid var(--line);
-  background: linear-gradient(180deg, #0a0a0d, #09090c);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-}
-
-:root[data-theme="light"] .rail {
-  background: linear-gradient(180deg, #edf1f9, #e4eaf5);
-}
-
-.rail__spacer {
-  height: 86px;
-}
-
-.rail__icons {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.rail__icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: #f04c73;
-  font-size: 13px;
-}
-
-.rail__icon:hover,
-.rail__icon:focus-visible {
-  background: rgba(240, 76, 115, 0.12);
-  outline: none;
-}
-
-.rail__footer {
-  margin-top: auto;
-  margin-bottom: 16px;
-  font-size: 10px;
-  color: #f04c73;
+  grid-template-columns: 206px 1fr;
 }
 
 .sidebar {
@@ -279,23 +233,13 @@ button:hover {
 }
 
 .topbar--stacked {
-  display: grid;
-  gap: 12px;
-  align-items: stretch;
-  padding: 16px 0 8px;
+  display: block;
+  padding: 16px 0 4px;
 }
 
 .topbar__actions {
   display: flex;
   gap: 10px;
-}
-
-.status-banner {
-  padding: 12px 16px;
-  border: 1px solid rgba(138, 73, 255, 0.2);
-  border-radius: 14px;
-  background: rgba(138, 73, 255, 0.08);
-  color: var(--text);
 }
 
 .page {
@@ -448,6 +392,39 @@ button:hover {
 
 .compact-list__text {
   color: var(--muted);
+}
+
+.micro-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.micro-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow);
+}
+
+.micro-stat-card__icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(138, 73, 255, 0.1);
+  color: #7b49f0;
+}
+
+.micro-stat-card__label {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin-bottom: 4px;
 }
 
 .kpi-row,
@@ -664,20 +641,15 @@ button:hover {
   padding: 10px 14px;
 }
 
+.ghost-tab.is-active {
+  border-color: rgba(138, 73, 255, 0.35);
+  background: rgba(138, 73, 255, 0.12);
+  color: #6f37e8;
+}
+
 .editor {
   min-height: 260px;
   resize: vertical;
-  margin-top: 14px;
-}
-
-.editor--compact {
-  min-height: 160px;
-}
-
-.manual-input-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
   margin-top: 14px;
 }
 
@@ -717,6 +689,89 @@ button:hover {
   color: var(--text);
   font-size: 1.15rem;
   font-weight: 600;
+}
+
+.run-results {
+  display: grid;
+  gap: 14px;
+}
+
+.result-card--summary {
+  min-height: auto;
+}
+
+.run-result-item {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.run-result-item__head,
+.run-result-item__meta,
+.run-result-item__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.run-result-item__title {
+  font-size: 1.02rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.run-result-item__meta {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.activity-chart {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-chart svg {
+  width: 100%;
+  height: 220px;
+  overflow: visible;
+}
+
+.activity-chart line {
+  stroke: rgba(103, 112, 137, 0.18);
+  stroke-dasharray: 3 4;
+}
+
+.activity-chart__line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.activity-chart__line--bench {
+  stroke: #4c81ff;
+}
+
+.activity-chart__line--vacancy {
+  stroke: #8a49ff;
+}
+
+.activity-chart__labels,
+.activity-chart__legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.activity-chart__legend {
+  justify-content: center;
 }
 
 .empty-state__icon {
@@ -771,11 +826,7 @@ button:hover {
 
 @media (max-width: 1180px) {
   .app-shell {
-    grid-template-columns: 0 92px 1fr;
-  }
-
-  .rail {
-    display: none;
+    grid-template-columns: 92px 1fr;
   }
 
   .brand {
@@ -806,10 +857,10 @@ button:hover {
   }
 
   .stat-grid,
+  .micro-stat-grid,
   .stat-grid--three,
   .dashboard-grid,
   .split-grid,
-  .manual-input-grid,
   .theme-switch,
   .form-grid,
   .match-card__content {
