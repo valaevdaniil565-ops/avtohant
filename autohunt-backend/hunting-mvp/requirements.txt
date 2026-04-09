@@ -1,0 +1,40 @@
+# --- config / settings ---
+python-dotenv==1.0.1
+pydantic==2.7.4
+pydantic-settings==2.3.4
+
+# --- database ---
+SQLAlchemy==2.0.32
+psycopg[binary]==3.2.1
+# Python wrapper for pgvector type support (used with Postgres pgvector)
+pgvector>=0.2.5,<0.4
+
+# --- http / retries ---
+requests==2.32.3
+tenacity==8.5.0
+# used in manager_bot.py (async http calls)
+aiohttp>=3.9,<4
+
+# --- web backend ---
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.22
+
+# --- telegram ---
+telethon==1.36.0
+python-telegram-bot==21.4
+
+
+# Optional: QR-login script support (generate QR image)
+qrcode[pil]>=7.4,<8
+
+# --- export ---
+openpyxl==3.1.5
+python-docx==1.2.0
+pypdf>=4.2,<6
+
+# --- migrations ---
+alembic==1.13.2
+
+# --- tests ---
+pytest>=8,<9

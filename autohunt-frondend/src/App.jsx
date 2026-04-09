@@ -1,13 +1,10 @@
 ﻿
 import React from "react";
 import {
-  benchItems,
   dashboardStats,
-  logs,
-  matches,
-  navItems,
-  vacancies
+  navItems
 } from "./data";
+import { api } from "./api";
 
 const iconPaths = {
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
@@ -109,31 +106,31 @@ function extractKeywords(value) {
     .filter((word) => !keywordStopwords.has(word));
 }
 
-function buildRunCorpus(mode) {
+function buildRunCorpus(mode, collections) {
   if (mode === "bench") {
-    return benchItems.map((item) => ({
+    return collections.vacancies.map((item) => ({
       id: item[0],
       title: item[0],
       subtitle: `${item[2]} • ${item[4]}`,
       meta: item[3],
       tags: item[1],
-      kindLabel: "Бенч",
-      searchableText: [item[0], item[1].join(" "), item[2], item[3], item[4], item[5], item[6]].join(" ")
+      kindLabel: "Вакансия",
+      searchableText: [item[0], item[1].join(" "), item[2], item[3], item[4], item[5]].join(" ")
     }));
   }
 
-  return vacancies.map((item) => ({
+  return collections.bench.map((item) => ({
     id: item[0],
     title: item[0],
     subtitle: `${item[2]} • ${item[4]}`,
     meta: item[3],
     tags: item[1],
-    kindLabel: "Вакансия",
-    searchableText: [item[0], item[1].join(" "), item[2], item[3], item[4], item[5]].join(" ")
+    kindLabel: "Бенч",
+    searchableText: [item[0], item[1].join(" "), item[2], item[3], item[4], item[5], item[6]].join(" ")
   }));
 }
 
-function buildManualRunResult(queryText, mode) {
+function buildManualRunResult(queryText, mode, collections) {
   if (!queryText.trim()) {
     return {
       title: "Нет текста для анализа",
@@ -152,7 +149,7 @@ function buildManualRunResult(queryText, mode) {
   }
 
   const querySet = new Set(queryKeywords);
-  const ranked = buildRunCorpus(mode)
+  const ranked = buildRunCorpus(mode, collections)
     .map((item) => {
       const targetKeywords = extractKeywords(item.searchableText);
       const targetSet = new Set(targetKeywords);
@@ -169,10 +166,10 @@ function buildManualRunResult(queryText, mode) {
     })
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+    .slice(0, 10);
 
   return {
-    title: mode === "bench" ? "Топ бенчей" : "Топ вакансий",
+    title: mode === "bench" ? "Топ-10 вакансий для специалиста" : "Топ-10 специалистов под вакансию",
     description: ranked.length
       ? "Показаны самые релевантные записи по ключевым словам."
       : "Подходящих записей по текущему тексту не найдено.",
@@ -184,9 +181,18 @@ function buildActivitySeries(seed, modifier) {
   return [0, 0, 0, 0, 0, 0, 0].map((_, index) => Math.max(0, Math.round(seed * modifier[index])));
 }
 
+const collectionLoaders = {
+  inbox: api.getInbox,
+  vacancies: api.getVacancies,
+  bench: api.getBench,
+  matches: api.getMatches,
+  logs: api.getLogs
+};
+
 function App() {
   const [path, setPath] = React.useState(window.location.pathname);
   const [theme, setTheme] = React.useState(initialTheme);
+  const [sourceCollections, setSourceCollections] = React.useState(initialCollections);
   const [collections, setCollections] = React.useState(initialCollections);
   const [runText, setRunText] = React.useState("");
   const [runMode, setRunMode] = React.useState("bench");
@@ -205,6 +211,27 @@ function App() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
+
+  const loadCollection = React.useCallback(async (pageName) => {
+    const loader = collectionLoaders[pageName];
+
+    if (!loader) {
+      return [];
+    }
+
+    const items = await loader();
+    setSourceCollections((prev) => ({ ...prev, [pageName]: items }));
+    setCollections((prev) => ({ ...prev, [pageName]: items }));
+    return items;
+  }, []);
+
+  React.useEffect(() => {
+    Object.keys(collectionLoaders).forEach((pageName) => {
+      loadCollection(pageName).catch((error) => {
+        console.error(`Failed to load ${pageName}:`, error);
+      });
+    });
+  }, [loadCollection]);
 
   const current = navItems.find((item) => item.path === path) ?? navItems[0];
   const sortedMatches = React.useMemo(() => {
@@ -241,6 +268,14 @@ function App() {
     matches: collections.matches.length,
     logs: collections.logs.length
   };
+  const ownBenchMatchesCount = sortedMatches.filter((item) => item.source === "own_bench").length;
+  const partnerBenchMatchesCount = sortedMatches.filter((item) => item.source === "partner_bench").length;
+  const digestSummary = {
+    time: "16:00",
+    todaysVacancies: collections.vacancies.length,
+    channelsStatus: "Ожидаем список приоритетных каналов",
+    partnersStatus: "Ожидаем список приоритетных партнеров"
+  };
   const activityLabels = ["25.03", "26.03", "27.03", "28.03", "29.03", "30.03", "31.03"];
   const benchActivity = buildActivitySeries(collections.bench.length, [0.4, 0.6, 0.8, 0.7, 1, 0.5, 0.9]);
   const vacancyActivity = buildActivitySeries(collections.vacancies.length, [0.6, 0.5, 0.7, 0.9, 0.8, 0.6, 1]);
@@ -248,14 +283,17 @@ function App() {
   const handlePageRefresh = (pageName) => {
     if (pageName === "run") {
       setRunResult(null);
-    } else {
-      setCollections((prev) => ({ ...prev, [pageName]: initialCollections[pageName] }));
+      return;
     }
+
+    loadCollection(pageName).catch((error) => {
+      console.error(`Failed to refresh ${pageName}:`, error);
+    });
   };
 
   const handleSearch = (pageName, rawFilters) => {
     const filters = rawFilters.map(normalizeText).filter(Boolean);
-    const source = initialCollections[pageName];
+    const source = sourceCollections[pageName];
 
     if (!source) {
       return;
@@ -266,7 +304,7 @@ function App() {
   };
 
   const handleRunProcess = () => {
-    const result = buildManualRunResult(runText, runMode);
+    const result = buildManualRunResult(runText, runMode, sourceCollections);
     setRunResult(result);
   };
 
@@ -362,6 +400,9 @@ function App() {
             matches={sortedMatches}
             inboxCount={statsByPage.inbox}
             logsCount={statsByPage.logs}
+            ownBenchMatchesCount={ownBenchMatchesCount}
+            partnerBenchMatchesCount={partnerBenchMatchesCount}
+            digestSummary={digestSummary}
             benchActivity={benchActivity}
             vacancyActivity={vacancyActivity}
             activityLabels={activityLabels}
@@ -459,12 +500,24 @@ function TopBar({ onClear, onToggleTheme }) {
   );
 }
 
-function DashboardPage({ navigate, stats, matches, inboxCount, logsCount, benchActivity, vacancyActivity, activityLabels }) {
+function DashboardPage({
+  navigate,
+  stats,
+  matches,
+  inboxCount,
+  logsCount,
+  ownBenchMatchesCount,
+  partnerBenchMatchesCount,
+  digestSummary,
+  benchActivity,
+  vacancyActivity,
+  activityLabels
+}) {
   return (
     <section className="page">
       <PageHeading
         title="Дашборд"
-        subtitle="Обзор активности системы рекрутинга"
+        subtitle="Обзор активности мэтчинга и ежедневных подборок"
         actionLabel="Открыть входящие"
         onAction={() => navigate("/inbox")}
       />
@@ -489,15 +542,15 @@ function DashboardPage({ navigate, stats, matches, inboxCount, logsCount, benchA
         <article className="micro-stat-card">
           <span className="micro-stat-card__icon">◌</span>
           <div>
-            <div className="micro-stat-card__label">Ожидают проверки</div>
-            <strong>{matches.length}</strong>
+            <div className="micro-stat-card__label">Наш бенч в мэтчинге</div>
+            <strong>{ownBenchMatchesCount}</strong>
           </div>
         </article>
         <article className="micro-stat-card">
           <span className="micro-stat-card__icon">△</span>
           <div>
-            <div className="micro-stat-card__label">Логов обработки</div>
-            <strong>{logsCount}</strong>
+            <div className="micro-stat-card__label">Партнерские совпадения</div>
+            <strong>{partnerBenchMatchesCount}</strong>
           </div>
         </article>
       </div>
@@ -507,14 +560,14 @@ function DashboardPage({ navigate, stats, matches, inboxCount, logsCount, benchA
       </Panel>
 
       <div className="dashboard-grid">
-        <Panel title="Последние совпадения" subtitle="Новые релевантные пары">
+        <Panel title="Приоритет мэтчинга" subtitle="Сначала наш бенч, затем партнеры">
           {matches.length ? (
             <div className="compact-list">
               {matches.map((match) => (
                 <div key={match.title} className="compact-list__item">
                   <div>
                     <div className="compact-list__title">
-                      {match.vacancy.company} ↔ {match.candidate.name}
+                      {match.priorityLabel}: {match.vacancy.company} ↔ {match.candidate.name}
                     </div>
                     <div className="compact-list__text">{match.title}</div>
                   </div>
@@ -523,23 +576,27 @@ function DashboardPage({ navigate, stats, matches, inboxCount, logsCount, benchA
               ))}
             </div>
           ) : (
-            <InlineEmptyState text="Пока нет ни одного совпадения." />
+            <InlineEmptyState text="Совпадений пока нет. При запуске сначала проверяем наш бенч, затем партнеров." />
           )}
         </Panel>
 
-        <Panel title="Системный статус" subtitle="Сводка по обработке">
-          <div className="progress-block">
-            <div className="progress-block__row">
-              <span>Успешность</span>
-              <strong>0%</strong>
+        <Panel title="Ежедневный дайджест" subtitle="Подборка новых вакансий к 16:00">
+          <div className="digest-card">
+            <div className="digest-card__row">
+              <span>Время отправки</span>
+              <strong>{digestSummary.time}</strong>
             </div>
-            <div className="progress">
-              <span style={{ width: "0%" }} />
+            <div className="digest-card__row">
+              <span>Сегодняшних вакансий в витрине</span>
+              <strong>{digestSummary.todaysVacancies}</strong>
             </div>
-            <div className="kpi-row">
-              <Badge tone="green">0 OK</Badge>
-              <Badge tone="red">0 ошибок</Badge>
-              <Badge tone="blue">0 мс</Badge>
+            <div className="digest-card__row">
+              <span>Каналы для парсинга</span>
+              <Badge tone="blue">{digestSummary.channelsStatus}</Badge>
+            </div>
+            <div className="digest-card__row">
+              <span>Приоритет партнеров</span>
+              <Badge tone="gold">{digestSummary.partnersStatus}</Badge>
             </div>
           </div>
         </Panel>
@@ -607,8 +664,13 @@ function VacanciesPage({ items, total, onRefresh, onSearch, onOpen }) {
 function BenchPage({ items, total, onRefresh, onSearch, onOpen }) {
   return (
     <section className="page">
-      <PageHeading title="Бенч (Специалисты)" subtitle={`Всего специалистов: ${total}`} actionLabel="Обновить" onAction={onRefresh} />
+      <PageHeading title="Бенч (Специалисты)" subtitle={`Всего специалистов на бенче: ${total}`} actionLabel="Обновить" onAction={onRefresh} />
       <FilterBar fields={["Поиск по локации...", "Стек", "Грейд", "Статус"]} buttonLabel="Искать" onSubmit={onSearch} />
+      <Panel title="Логика подбора" subtitle="">
+        <div className="priority-note">
+          Специалист на бенче считается доступным по умолчанию. Для подбора вакансий используем стек, грейд, ставку и локацию/формат.
+        </div>
+      </Panel>
       <Table
         columns={["Специалист", "Стек", "Грейд", "Ставка", "Локация", "Статус", "Дата", ""]}
         rows={items.map((item) => [
@@ -635,6 +697,9 @@ function BenchPage({ items, total, onRefresh, onSearch, onOpen }) {
 }
 
 function MatchesPage({ items, sortOrder, onSortChange, onRefresh, onAction }) {
+  const ownBenchMatches = items.filter((item) => item.source === "own_bench");
+  const partnerBenchMatches = items.filter((item) => item.source === "partner_bench");
+
   return (
     <section className="page">
       <PageHeading title="Совпадения" subtitle={`Всего совпадений: ${items.length}`} actionLabel="Обновить" onAction={onRefresh} />
@@ -644,14 +709,32 @@ function MatchesPage({ items, sortOrder, onSortChange, onRefresh, onAction }) {
           <div className="stat-card__label">Всего</div>
         </article>
         <article className="stat-card stat-card--gold">
-          <div className="stat-card__value">{items.length}</div>
-          <div className="stat-card__label">На проверке</div>
+          <div className="stat-card__value">{ownBenchMatches.length}</div>
+          <div className="stat-card__label">Наш бенч</div>
         </article>
         <article className="stat-card stat-card--green">
-          <div className="stat-card__value">0</div>
-          <div className="stat-card__label">Подтверждено</div>
+          <div className="stat-card__value">{partnerBenchMatches.length}</div>
+          <div className="stat-card__label">Партнеры</div>
         </article>
       </div>
+
+      <Panel title="Правило приоритета" subtitle="">
+        <div className="priority-note">
+          Сначала ищем совпадения по нашему бенчу. Если внутренних совпадений нет, показываем партнерский бенч. Если не подошел никто, явно фиксируем, что вакансия обработана и совпадений не найдено.
+        </div>
+      </Panel>
+
+      {!ownBenchMatches.length && partnerBenchMatches.length ? (
+        <div className="status-banner status-banner--warning">
+          По нашему бенчу совпадений не найдено. Ниже показаны только партнерские специалисты.
+        </div>
+      ) : null}
+
+      {!items.length ? (
+        <div className="status-banner">
+          Совпадений не найдено. Вакансия обработана: сначала проверен наш бенч, затем партнерские бенчи.
+        </div>
+      ) : null}
 
       <div className="sort-switch" role="group" aria-label="Сортировка совпадений">
         <span>Сортировка по релевантности:</span>
@@ -681,7 +764,10 @@ function MatchesPage({ items, sortOrder, onSortChange, onRefresh, onAction }) {
                   <div className="match-card__eyebrow">Релевантность</div>
                   <h3>{match.title}</h3>
                 </div>
-                <Badge tone="blue">{match.status}</Badge>
+                <div className="match-card__badges">
+                  <Badge tone={match.source === "own_bench" ? "green" : "gold"}>{match.priorityLabel}</Badge>
+                  <Badge tone="blue">{match.status}</Badge>
+                </div>
               </div>
 
               <div className="match-card__content">
@@ -728,24 +814,24 @@ function MatchesPage({ items, sortOrder, onSortChange, onRefresh, onAction }) {
 function RunPage({ mode, value, result, onModeChange, onChange, onClear, onProcess }) {
   return (
     <section className="page">
-      <PageHeading title="Ручной прогон" subtitle="Вставьте текст и получите топ релевантной выдачи с противоположной стороны" />
+      <PageHeading title="Ручной прогон" subtitle="Вставьте текст и получите Top-10 релевантной выдачи с противоположной стороны" />
       <div className="split-grid">
         <Panel title="Входные данные" subtitle="">
           <div className="panel-actions">
             <button className={`ghost-tab ${mode === "bench" ? "is-active" : ""}`} type="button" onClick={() => onModeChange("bench")}>
-              Вакансия → бенчи
+              Специалист на бенче → вакансии
             </button>
             <button className={`ghost-tab ${mode === "vacancy" ? "is-active" : ""}`} type="button" onClick={() => onModeChange("vacancy")}>
-              Бенч → вакансии
+              Вакансия → специалисты
             </button>
           </div>
 
-          <div className="input-label">{mode === "bench" ? "Текст вакансии" : "Текст бенча"}</div>
+          <div className="input-label">{mode === "bench" ? "Текст специалиста на бенче" : "Текст вакансии"}</div>
           <textarea
             className="editor"
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            placeholder={mode === "bench" ? "Вставьте описание вакансии..." : "Вставьте описание специалиста..."}
+            placeholder={mode === "bench" ? "Вставьте описание специалиста..." : "Вставьте описание вакансии..."}
           />
 
           <div className="editor-footer">

@@ -1,32 +1,8 @@
-# Matcher Frontend
+# Avtohant
 
-Фронтенд, повторяющий интерфейс со скринов: тёмный dashboard, боковое меню, таблицы, карточки совпадений, экран ручного прогона, логи и настройки.
+Monorepo with two main applications:
 
-## Запуск
+- `autohunt-frondend` - React/Vite frontend
+- `autohunt-backend/hunting-mvp` - backend API, worker, scheduler, Telegram bot and collector
 
-Нужен `Node.js 18+`.
-
-```bash
-npm install
-npm run dev
-```
-
-После запуска открой адрес, который покажет `Vite`, обычно это `http://localhost:5173`.
-
-## Доступные экраны
-
-- `/`
-- `/inbox`
-- `/vacancies`
-- `/bench`
-- `/matches`
-- `/process`
-- `/logs`
-- `/settings`
-
-## Сборка
-
-```bash
-npm run build
-npm run preview
-```
+Local setup details live inside each project folder.

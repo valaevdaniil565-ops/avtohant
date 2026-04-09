@@ -1,5 +1,22 @@
-﻿node_modules/
-dist/
-.vscode/
+*.log
 .DS_Store
-npm-debug.log*
+
+# Root/editor
+.vscode/
+
+# Frontend
+autohunt-frondend/node_modules/
+autohunt-frondend/dist/
+autohunt-frondend/.env.local
+
+# Backend
+autohunt-backend/__MACOSX/
+autohunt-backend/hunting-mvp/.env
+autohunt-backend/hunting-mvp/.git.local-backup/
+autohunt-backend/hunting-mvp/.run/
+autohunt-backend/hunting-mvp/.venv/
+autohunt-backend/hunting-mvp/.venv-win/
+autohunt-backend/hunting-mvp/.pytest_cache/
+autohunt-backend/hunting-mvp/storage/sessions/*.session
+autohunt-backend/hunting-mvp/storage/sessions/*.session-journal
+autohunt-backend/hunting-mvp/storage/telegram/
