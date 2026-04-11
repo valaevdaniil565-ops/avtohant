@@ -12,6 +12,21 @@ Telegram-first MVP for vacancies/bench ingestion, extraction, matching and diges
 
 ## Local Setup
 
+### Simplest Dev Mode
+
+For local `frontend + backend` development you can skip:
+
+- `telethon collector`
+- `manager bot`
+- Telegram credentials like `TG_API_ID`, `TG_API_HASH`, `BOT_TOKEN`
+
+In this mode you only need:
+
+- PostgreSQL
+- web backend
+- optional worker / scheduler
+- demo seed data or manual imports
+
 1. Copy env:
 
 ```bash
@@ -61,6 +76,22 @@ make verify
 
 `manual upload`, matching and extraction require a running local Ollama server on `OLLAMA_HOST`.
 
+### Run Without Telegram Collector
+
+Minimal local flow:
+
+```bash
+cp .env.example .env
+PYTHONPATH=. python scripts/seed_demo_data.py
+PYTHONPATH=. python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+You can also seed demo data through:
+
+- `POST /api/admin/dev/seed-demo`
+
+This mode is useful when you want to develop the API and frontend without live Telegram ingestion.
+
 ## API
 
 Base URL: `http://127.0.0.1:8000/api`
@@ -81,6 +112,10 @@ Main endpoints:
 - `POST /imports/file`
 - `GET /imports/{job_id}`
 - `GET /jobs/{job_id}`
+- `GET /settings`
+- `GET /audit`
+- `GET /digest/daily`
+- `GET /admin/overview`
 - `POST /entities/hide-by-source`
 - `GET /own-bench/status`
 

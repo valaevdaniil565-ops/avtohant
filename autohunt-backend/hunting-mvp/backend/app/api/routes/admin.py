@@ -5,10 +5,12 @@ from sqlalchemy import text
 
 from app.services.app_settings import OWN_BENCH_SOURCE_URL_KEY, PARTNER_COMPANIES_SOURCE_URL_KEY, get_effective_setting, get_setting
 from app.services.audit_log import write_audit_event
+from app.use_cases.dev_seed import seed_demo_data
 from app.use_cases.jobs import enqueue_own_bench_sync, enqueue_partner_companies_sync, get_job_counts
 from app.use_cases.own_bench import get_sync_status
 from app.use_cases.source_trace import list_recent_imports, list_recent_sources
 from backend.app.api.schemas import AdminOverviewResponse, ImportJobAcceptedResponse
+from backend.app.api.deps import get_repo
 from backend.app.db.session import get_engine, ping_db
 
 router = APIRouter()
@@ -81,3 +83,16 @@ def run_partner_sync() -> ImportJobAcceptedResponse:
         payload={"source_url": source_url},
     )
     return ImportJobAcceptedResponse(job_id=job.id, status=job.status)
+
+
+@router.post("/dev/seed-demo")
+def seed_demo() -> dict[str, object]:
+    engine = get_engine()
+    result = seed_demo_data(engine, get_repo())
+    write_audit_event(
+        engine,
+        event_type="dev.seed_demo",
+        entity_type="system",
+        payload=result,
+    )
+    return {"status": "ok", "seeded": result}
