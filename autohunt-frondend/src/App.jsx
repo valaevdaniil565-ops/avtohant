@@ -95,7 +95,14 @@ function normalizeText(value) {
 
 function itemContainsFilters(item, filters) {
   const haystack = normalizeText(JSON.stringify(item));
-  return filters.every((filter) => !filter || haystack.includes(filter));
+  return filters.every((filter) => {
+    if (!filter) {
+      return true;
+    }
+
+    const aliases = filter === "ок" || filter === "ok" ? ["ок", "ok"] : [filter];
+    return aliases.some((alias) => haystack.includes(alias));
+  });
 }
 
 function extractKeywords(value) {
@@ -194,6 +201,8 @@ function App() {
   const [theme, setTheme] = React.useState(initialTheme);
   const [sourceCollections, setSourceCollections] = React.useState(initialCollections);
   const [collections, setCollections] = React.useState(initialCollections);
+  const [notice, setNotice] = React.useState(null);
+  const [actionDialog, setActionDialog] = React.useState(null);
   const [runText, setRunText] = React.useState("");
   const [runMode, setRunMode] = React.useState("bench");
   const [runResult, setRunResult] = React.useState(null);
@@ -211,6 +220,15 @@ function App() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
+
+  React.useEffect(() => {
+    if (!notice) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setNotice(null), 3200);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   const loadCollection = React.useCallback(async (pageName) => {
     const loader = collectionLoaders[pageName];
@@ -313,6 +331,7 @@ function App() {
       ...prev,
       matches: prev.matches.filter((item) => item.title !== matchTitle)
     }));
+    setNotice(action === "approve" ? `Совпадение "${matchTitle}" подтверждено.` : `Совпадение "${matchTitle}" отклонено.`);
   };
 
   const handleSettingsChange = (key, value) => {
@@ -321,16 +340,69 @@ function App() {
 
   const handleSettingsSave = () => {
     setTheme(settingsTheme);
+    setNotice("Настройки сохранены.");
   };
 
   const handleSettingsReset = () => {
     setSettings(defaultSettings);
     setSettingsTheme(initialTheme);
     setTheme(initialTheme);
+    setNotice("Настройки сброшены.");
   };
 
-  const handleRowAction = (kind, label) => {
-    return { kind, label };
+  const handleRowAction = (kind, payload) => {
+    if (!payload) {
+      return;
+    }
+
+    const dialogByKind = {
+      inbox: {
+        title: `Источник: ${payload[1] ?? "—"}`,
+        rows: [
+          ["Тип", payload[0]],
+          ["Автор", payload[2]],
+          ["Превью", payload[3]],
+          ["Статус", payload[4]],
+          ["Дата", payload[5]]
+        ]
+      },
+      vacancies: {
+        title: `Вакансия: ${payload[0] ?? "—"}`,
+        rows: [
+          ["Стек", Array.isArray(payload[1]) ? payload[1].join(", ") : payload[1]],
+          ["Грейд", payload[2]],
+          ["Ставка", payload[3]],
+          ["Статус", payload[4]],
+          ["Дата", payload[5]]
+        ]
+      },
+      bench: {
+        title: `Профиль: ${payload[0] ?? "—"}`,
+        rows: [
+          ["Стек", Array.isArray(payload[1]) ? payload[1].join(", ") : payload[1]],
+          ["Грейд", payload[2]],
+          ["Ставка", payload[3]],
+          ["Локация", payload[4]],
+          ["Статус", payload[5]],
+          ["Дата", payload[6]]
+        ]
+      },
+      logs: {
+        title: `Лог: ${payload[2] ?? "—"}`,
+        rows: [
+          ["Статус", payload[0]],
+          ["Модель", payload[1]],
+          ["Message ID", payload[2]],
+          ["Длительность", payload[3]],
+          ["Дата", payload[4]]
+        ]
+      }
+    };
+
+    const dialog = dialogByKind[kind];
+    if (dialog) {
+      setActionDialog(dialog);
+    }
   };
 
   return (
@@ -391,7 +463,6 @@ function App() {
       <main className="content">
         <TopBar
           onClear={clearAllResults}
-          onToggleTheme={() => applyTheme(theme === "dark" ? "light" : "dark")}
         />
         {current.id === "dashboard" && (
           <DashboardPage
@@ -414,7 +485,7 @@ function App() {
             total={statsByPage.inbox}
             onRefresh={() => handlePageRefresh("inbox")}
             onSearch={(filters) => handleSearch("inbox", filters)}
-            onOpen={(label) => handleRowAction("inbox", label)}
+            onOpen={(item) => handleRowAction("inbox", item)}
           />
         )}
         {current.id === "vacancies" && (
@@ -423,7 +494,7 @@ function App() {
             total={statsByPage.vacancies}
             onRefresh={() => handlePageRefresh("vacancies")}
             onSearch={(filters) => handleSearch("vacancies", filters)}
-            onOpen={(label) => handleRowAction("vacancies", label)}
+            onOpen={(item) => handleRowAction("vacancies", item)}
           />
         )}
         {current.id === "bench" && (
@@ -432,7 +503,7 @@ function App() {
             total={statsByPage.bench}
             onRefresh={() => handlePageRefresh("bench")}
             onSearch={(filters) => handleSearch("bench", filters)}
-            onOpen={(label) => handleRowAction("bench", label)}
+            onOpen={(item) => handleRowAction("bench", item)}
           />
         )}
         {current.id === "matches" && (
@@ -464,7 +535,7 @@ function App() {
             total={statsByPage.logs}
             onRefresh={() => handlePageRefresh("logs")}
             onSearch={(filters) => handleSearch("logs", filters)}
-            onOpen={(label) => handleRowAction("logs", label)}
+            onOpen={(item) => handleRowAction("logs", item)}
           />
         )}
         {current.id === "settings" && (
@@ -478,11 +549,13 @@ function App() {
           />
         )}
       </main>
+      {notice ? <Notice text={notice} /> : null}
+      {actionDialog ? <ActionDialog {...actionDialog} onClose={() => setActionDialog(null)} /> : null}
     </div>
   );
 }
 
-function TopBar({ onClear, onToggleTheme }) {
+function TopBar({ onClear }) {
   return (
     <header className="topbar topbar--stacked">
       <div className="topbar__row">
@@ -490,9 +563,6 @@ function TopBar({ onClear, onToggleTheme }) {
         <div className="topbar__actions">
           <button type="button" className="icon-button" onClick={onClear} title="Очистить результаты">
             ✕
-          </button>
-          <button type="button" className="icon-button" onClick={onToggleTheme} title="Переключить тему">
-            ◐
           </button>
         </div>
       </div>
@@ -625,7 +695,7 @@ function InboxPage({ items, total, onRefresh, onSearch, onOpen }) {
             {item[4]}
           </Badge>,
           item[5],
-          <button key={`open-${item[1]}`} className="table-action" type="button" onClick={() => onOpen(item[1])} title="Открыть источник">
+          <button key={`open-${item[1]}`} className="table-action" type="button" onClick={() => onOpen(item)} title="Открыть источник">
             ↗
           </button>
         ])}
@@ -651,7 +721,7 @@ function VacanciesPage({ items, total, onRefresh, onSearch, onOpen }) {
           item[3],
           <Badge key={`status-${item[0]}`} tone="green">{item[4]}</Badge>,
           item[5],
-          <button key={`details-${item[0]}`} className="table-action" type="button" onClick={() => onOpen(item[0])} title="Показать детали">
+          <button key={`details-${item[0]}`} className="table-action" type="button" onClick={() => onOpen(item)} title="Показать детали">
             ⋯
           </button>
         ])}
@@ -686,7 +756,7 @@ function BenchPage({ items, total, onRefresh, onSearch, onOpen }) {
           item[4],
           <Badge key={`status-${item[0]}`} tone="green">{item[5]}</Badge>,
           item[6],
-          <button key={`candidate-${item[0]}`} className="table-action" type="button" onClick={() => onOpen(item[0])} title="Открыть профиль">
+          <button key={`candidate-${item[0]}`} className="table-action" type="button" onClick={() => onOpen(item)} title="Открыть профиль">
             ↗
           </button>
         ])}
@@ -957,7 +1027,7 @@ function LogsPage({ items, total, onRefresh, onSearch, onOpen }) {
           item[2],
           item[3],
           item[4],
-          <button key={`log-${item[2]}`} className="table-action" type="button" onClick={() => onOpen(item[2])} title="Показать лог">
+          <button key={`log-${item[2]}`} className="table-action" type="button" onClick={() => onOpen(item)} title="Показать лог">
             ⋯
           </button>
         ])}
@@ -1044,10 +1114,11 @@ function PageHeading({ title, subtitle, actionLabel, onAction }) {
 
 function FilterBar({ fields, buttonLabel, onSubmit }) {
   const [values, setValues] = React.useState(() => fields.map(() => ""));
+  const fieldsSignature = fields.join("|");
 
   React.useEffect(() => {
     setValues(fields.map(() => ""));
-  }, [fields]);
+  }, [fieldsSignature]);
 
   return (
     <div className="filter-bar">
@@ -1070,6 +1141,37 @@ function FilterBar({ fields, buttonLabel, onSubmit }) {
           ⌕ {buttonLabel}
         </button>
       ) : null}
+    </div>
+  );
+}
+
+function Notice({ text }) {
+  return (
+    <div className="notice-toast" role="status" aria-live="polite">
+      {text}
+    </div>
+  );
+}
+
+function ActionDialog({ title, rows, onClose }) {
+  return (
+    <div className="dialog-backdrop" role="presentation" onClick={onClose}>
+      <div className="dialog-card" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+        <div className="dialog-card__head">
+          <h3>{title}</h3>
+          <button className="icon-button" type="button" onClick={onClose} title="Закрыть">
+            ✕
+          </button>
+        </div>
+        <div className="dialog-card__body">
+          {rows.map(([label, value]) => (
+            <div key={label} className="dialog-card__row">
+              <span>{label}</span>
+              <strong>{value || "—"}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

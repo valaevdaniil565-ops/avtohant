@@ -72,6 +72,10 @@ button:hover {
   flex-direction: column;
   border-right: 1px solid var(--line);
   background: rgba(15, 15, 20, 0.96);
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+  height: 100vh;
 }
 
 :root[data-theme="light"] .sidebar {
@@ -319,6 +323,12 @@ button:hover {
   border-color: rgba(23, 178, 107, 0.18);
 }
 
+:root[data-theme="light"] .btn--success {
+  background: rgba(23, 178, 107, 0.14);
+  color: #0d7a4f;
+  border-color: rgba(23, 178, 107, 0.24);
+}
+
 .panel,
 .table-wrap,
 .filter-bar,
@@ -444,6 +454,10 @@ button:hover {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.72);
   box-shadow: var(--shadow);
+}
+
+:root[data-theme="dark"] .micro-stat-card {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .micro-stat-card__icon {
@@ -724,6 +738,7 @@ button:hover {
   padding: 24px;
   border-radius: 16px;
   border: 1px dashed var(--line);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .result-card__title {
@@ -748,6 +763,14 @@ button:hover {
   border-radius: 16px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.4);
+}
+
+:root[data-theme="dark"] .run-result-item {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme="light"] .run-result-item {
+  background: rgba(20, 29, 52, 0.04);
 }
 
 .run-result-item__head,
@@ -825,6 +848,70 @@ button:hover {
   text-align: center;
   color: var(--muted);
   padding: 16px 0 6px;
+}
+
+.notice-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  max-width: 360px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(10, 10, 13, 0.56);
+}
+
+.dialog-card {
+  width: min(520px, 100%);
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.dialog-card__head,
+.dialog-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dialog-card__head {
+  padding: 18px 18px 0;
+}
+
+.dialog-card__head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.dialog-card__body {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.dialog-card__row {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--bg-soft);
+}
+
+.dialog-card__row span {
+  color: var(--muted);
 }
 
 .theme-switch {
@@ -927,6 +1014,9 @@ button:hover {
   .sidebar {
     border-right: none;
     border-bottom: 1px solid var(--line);
+    position: static;
+    min-height: auto;
+    height: auto;
   }
 
   .menu {
