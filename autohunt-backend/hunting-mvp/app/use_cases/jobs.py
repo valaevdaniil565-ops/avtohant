@@ -388,29 +388,29 @@ def _cleanup_import_upload(file_path: str | None) -> None:
         log.warning("Failed to remove import upload file_path=%s", raw, exc_info=True)
 
 
-def enqueue_text_import(engine, *, text_value: str, forced_type: str | None = None) -> JobRecord:
+def enqueue_text_import(engine, *, text_value: str, forced_type: str | None = None, bench_origin: str | None = None) -> JobRecord:
     return enqueue_job(
         engine,
         kind="import_text",
-        payload={"text": text_value, "forced_type": forced_type},
+        payload={"text": text_value, "forced_type": forced_type, "bench_origin": bench_origin},
         max_attempts=2,
     )
 
 
-def enqueue_url_import(engine, *, url: str, forced_type: str | None = None) -> JobRecord:
+def enqueue_url_import(engine, *, url: str, forced_type: str | None = None, bench_origin: str | None = None) -> JobRecord:
     return enqueue_job(
         engine,
         kind="import_url",
-        payload={"url": url, "forced_type": forced_type},
+        payload={"url": url, "forced_type": forced_type, "bench_origin": bench_origin},
         max_attempts=2,
     )
 
 
-def enqueue_file_import(engine, *, filename: str, mime_type: str, data: bytes, forced_type: str | None = None) -> JobRecord:
+def enqueue_file_import(engine, *, filename: str, mime_type: str, data: bytes, forced_type: str | None = None, bench_origin: str | None = None) -> JobRecord:
     job = enqueue_job(
         engine,
         kind="import_file",
-        payload={"filename": filename, "mime_type": mime_type, "forced_type": forced_type},
+        payload={"filename": filename, "mime_type": mime_type, "forced_type": forced_type, "bench_origin": bench_origin},
         max_attempts=2,
     )
     file_path = persist_import_upload(job.id, filename=filename, data=data)
@@ -427,7 +427,7 @@ def enqueue_file_import(engine, *, filename: str, mime_type: str, data: bytes, f
             {
                 "job_id": job.id,
                 "payload": _normalize_payload(
-                    {"filename": filename, "mime_type": mime_type, "forced_type": forced_type, "file_path": file_path}
+                    {"filename": filename, "mime_type": mime_type, "forced_type": forced_type, "bench_origin": bench_origin, "file_path": file_path}
                 ),
             },
         )
@@ -490,6 +490,7 @@ def execute_job(engine, job: JobRecord, *, repo: Repo, ollama: OllamaClient, sou
             ollama=ollama,
             text=str(payload.get("text") or ""),
             forced_type=(str(payload.get("forced_type")) if payload.get("forced_type") else None),
+            bench_origin=(str(payload.get("bench_origin")) if payload.get("bench_origin") else None),
         )
         return _job_result_from_summary(summary)
 
@@ -504,6 +505,7 @@ def execute_job(engine, job: JobRecord, *, repo: Repo, ollama: OllamaClient, sou
             source_fetcher=source_fetcher,
             url=str(payload.get("url") or ""),
             forced_type=(str(payload.get("forced_type")) if payload.get("forced_type") else None),
+            bench_origin=(str(payload.get("bench_origin")) if payload.get("bench_origin") else None),
         )
         return _job_result_from_summary(summary)
 
@@ -522,6 +524,7 @@ def execute_job(engine, job: JobRecord, *, repo: Repo, ollama: OllamaClient, sou
                 mime_type=str(payload.get("mime_type") or "application/octet-stream"),
                 data=data,
                 forced_type=(str(payload.get("forced_type")) if payload.get("forced_type") else None),
+                bench_origin=(str(payload.get("bench_origin")) if payload.get("bench_origin") else None),
             )
         finally:
             _cleanup_import_upload(file_path)

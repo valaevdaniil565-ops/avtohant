@@ -37,6 +37,12 @@ const defaultSettings = {
   ttlLongTerm: "90",
   matchThreshold: "50"
 };
+const defaultTelegramChannelForm = {
+  telegram_id: "",
+  title: "",
+  username: "",
+  source_kind: "vacancy"
+};
 const exampleTexts = {
   vacancy: [
     "Senior Java Developer",
@@ -209,6 +215,8 @@ function App() {
   const [matchesSortOrder, setMatchesSortOrder] = React.useState("desc");
   const [settings, setSettings] = React.useState(defaultSettings);
   const [settingsTheme, setSettingsTheme] = React.useState(initialTheme);
+  const [benchScope, setBenchScope] = React.useState("all");
+  const [telegramChannels, setTelegramChannels] = React.useState([]);
 
   React.useEffect(() => {
     const onChange = () => setPath(window.location.pathname);
@@ -237,10 +245,20 @@ function App() {
       return [];
     }
 
-    const items = await loader();
+    const params = pageName === "bench" ? { bench_scope: benchScope } : undefined;
+    const items = await loader(params);
     setSourceCollections((prev) => ({ ...prev, [pageName]: items }));
     setCollections((prev) => ({ ...prev, [pageName]: items }));
     return items;
+  }, [benchScope]);
+
+  const loadTelegramChannels = React.useCallback(async () => {
+    try {
+      const payload = await api.getTelegramChannels();
+      setTelegramChannels(Array.isArray(payload?.items) ? payload.items : []);
+    } catch (error) {
+      console.error("Failed to load telegram channels:", error);
+    }
   }, []);
 
   React.useEffect(() => {
@@ -249,7 +267,8 @@ function App() {
         console.error(`Failed to load ${pageName}:`, error);
       });
     });
-  }, [loadCollection]);
+    loadTelegramChannels();
+  }, [loadCollection, loadTelegramChannels]);
 
   const current = navItems.find((item) => item.path === path) ?? navItems[0];
   const sortedMatches = React.useMemo(() => {
@@ -348,6 +367,42 @@ function App() {
     setSettingsTheme(initialTheme);
     setTheme(initialTheme);
     setNotice("Настройки сброшены.");
+  };
+
+  const handleManualImport = async ({ sourceKind, payload, forcedType, benchOrigin }) => {
+    if (sourceKind === "text") {
+      await api.importTextSync({ text: payload, forced_type: forcedType, bench_origin: benchOrigin });
+    } else if (sourceKind === "url") {
+      await api.importUrlSync({ url: payload, forced_type: forcedType, bench_origin: benchOrigin });
+    } else if (sourceKind === "file") {
+      await api.importFileSync({ file: payload, forcedType, benchOrigin });
+    }
+    await Promise.all([loadCollection("vacancies"), loadCollection("bench"), loadCollection("matches"), loadCollection("inbox")]);
+    setNotice("Импорт завершен, база обновлена.");
+  };
+
+  const handleTelegramChannelSave = async (payload) => {
+    await api.upsertTelegramChannel({
+      telegram_id: Number(payload.telegram_id),
+      title: payload.title,
+      username: payload.username || null,
+      source_kind: payload.source_kind,
+      is_active: true
+    });
+    await loadTelegramChannels();
+    setNotice("Telegram-канал сохранен.");
+  };
+
+  const handleTelegramVacanciesImport = async () => {
+    const result = await api.importTelegramVacancies({ limit: 300 });
+    await Promise.all([loadCollection("vacancies"), loadCollection("matches"), loadCollection("inbox")]);
+    setNotice(`Из Telegram подтянуто вакансий: ${result.imported_vacancies ?? 0}.`);
+  };
+
+  const handleMatchingRebuild = async () => {
+    const result = await api.rebuildMatching({ limit: 500 });
+    await Promise.all([loadCollection("matches"), loadCollection("vacancies"), loadCollection("bench")]);
+    setNotice(`Релевантность пересчитана. Обработано вакансий: ${result.processed_vacancies ?? 0}.`);
   };
 
   const handleRowAction = (kind, payload) => {
@@ -452,7 +507,7 @@ function App() {
             onClick={() => {
               clearAllResults();
               navigate("/");
-              showNotice("Сессия завершена. Интерфейс возвращен в исходное состояние.");
+              setNotice("Сессия завершена. Интерфейс возвращен в исходное состояние.");
             }}
           >
             ⌫ Выйти
@@ -477,6 +532,11 @@ function App() {
             benchActivity={benchActivity}
             vacancyActivity={vacancyActivity}
             activityLabels={activityLabels}
+            telegramChannels={telegramChannels}
+            onManualImport={handleManualImport}
+            onTelegramChannelSave={handleTelegramChannelSave}
+            onTelegramVacanciesImport={handleTelegramVacanciesImport}
+            onMatchingRebuild={handleMatchingRebuild}
           />
         )}
         {current.id === "inbox" && (
@@ -501,6 +561,8 @@ function App() {
           <BenchPage
             items={collections.bench}
             total={statsByPage.bench}
+            benchScope={benchScope}
+            onBenchScopeChange={setBenchScope}
             onRefresh={() => handlePageRefresh("bench")}
             onSearch={(filters) => handleSearch("bench", filters)}
             onOpen={(item) => handleRowAction("bench", item)}
@@ -581,7 +643,12 @@ function DashboardPage({
   digestSummary,
   benchActivity,
   vacancyActivity,
-  activityLabels
+  activityLabels,
+  telegramChannels,
+  onManualImport,
+  onTelegramChannelSave,
+  onTelegramVacanciesImport,
+  onMatchingRebuild
 }) {
   return (
     <section className="page">
@@ -630,6 +697,16 @@ function DashboardPage({
       </Panel>
 
       <div className="dashboard-grid">
+        <Panel title="Ручная загрузка и актуализация" subtitle="Бенч или вакансия, файл или ссылка, плюс операции по Telegram и релевантности">
+          <ImportControlPanel
+            telegramChannels={telegramChannels}
+            onManualImport={onManualImport}
+            onTelegramChannelSave={onTelegramChannelSave}
+            onTelegramVacanciesImport={onTelegramVacanciesImport}
+            onMatchingRebuild={onMatchingRebuild}
+          />
+        </Panel>
+
         <Panel title="Приоритет мэтчинга" subtitle="Сначала наш бенч, затем партнеры">
           {matches.length ? (
             <div className="compact-list">
@@ -731,10 +808,21 @@ function VacanciesPage({ items, total, onRefresh, onSearch, onOpen }) {
   );
 }
 
-function BenchPage({ items, total, onRefresh, onSearch, onOpen }) {
+function BenchPage({ items, total, benchScope, onBenchScopeChange, onRefresh, onSearch, onOpen }) {
   return (
     <section className="page">
       <PageHeading title="Бенч (Специалисты)" subtitle={`Всего специалистов на бенче: ${total}`} actionLabel="Обновить" onAction={onRefresh} />
+      <div className="panel-actions">
+        <button className={`ghost-tab ${benchScope === "all" ? "is-active" : ""}`} type="button" onClick={() => onBenchScopeChange("all")}>
+          Весь бенч
+        </button>
+        <button className={`ghost-tab ${benchScope === "own" ? "is-active" : ""}`} type="button" onClick={() => onBenchScopeChange("own")}>
+          Наш бенч
+        </button>
+        <button className={`ghost-tab ${benchScope === "partner" ? "is-active" : ""}`} type="button" onClick={() => onBenchScopeChange("partner")}>
+          Бенч партнеров
+        </button>
+      </div>
       <FilterBar fields={["Поиск по локации...", "Стек", "Грейд", "Статус"]} buttonLabel="Искать" onSubmit={onSearch} />
       <Panel title="Логика подбора" subtitle="">
         <div className="priority-note">
@@ -1108,6 +1196,178 @@ function PageHeading({ title, subtitle, actionLabel, onAction }) {
           ⟳ {actionLabel}
         </button>
       ) : null}
+    </div>
+  );
+}
+
+function ImportControlPanel({
+  telegramChannels,
+  onManualImport,
+  onTelegramChannelSave,
+  onTelegramVacanciesImport,
+  onMatchingRebuild
+}) {
+  const [sourceKind, setSourceKind] = React.useState("text");
+  const [forcedType, setForcedType] = React.useState("VACANCY");
+  const [benchOrigin, setBenchOrigin] = React.useState("own");
+  const [textValue, setTextValue] = React.useState("");
+  const [urlValue, setUrlValue] = React.useState("");
+  const [fileValue, setFileValue] = React.useState(null);
+  const [channelForm, setChannelForm] = React.useState(defaultTelegramChannelForm);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const submitImport = async () => {
+    const payload =
+      sourceKind === "text"
+        ? textValue
+        : sourceKind === "url"
+          ? urlValue
+          : fileValue;
+    if (!payload) {
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onManualImport({
+        sourceKind,
+        payload,
+        forcedType,
+        benchOrigin: forcedType === "BENCH" ? benchOrigin : null
+      });
+      setTextValue("");
+      setUrlValue("");
+      setFileValue(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const saveChannel = async () => {
+    if (!channelForm.telegram_id || !channelForm.title.trim()) {
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onTelegramChannelSave(channelForm);
+      setChannelForm(defaultTelegramChannelForm);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="settings-stack">
+      <div className="panel-actions">
+        <button className={`ghost-tab ${sourceKind === "text" ? "is-active" : ""}`} type="button" onClick={() => setSourceKind("text")}>
+          Текст
+        </button>
+        <button className={`ghost-tab ${sourceKind === "url" ? "is-active" : ""}`} type="button" onClick={() => setSourceKind("url")}>
+          Ссылка
+        </button>
+        <button className={`ghost-tab ${sourceKind === "file" ? "is-active" : ""}`} type="button" onClick={() => setSourceKind("file")}>
+          Файл
+        </button>
+      </div>
+
+      <div className="form-grid">
+        <div className="field">
+          <label>Что загружаем</label>
+          <div className="panel-actions">
+            <button className={`ghost-tab ${forcedType === "VACANCY" ? "is-active" : ""}`} type="button" onClick={() => setForcedType("VACANCY")}>
+              Вакансия
+            </button>
+            <button className={`ghost-tab ${forcedType === "BENCH" ? "is-active" : ""}`} type="button" onClick={() => setForcedType("BENCH")}>
+              Бенч
+            </button>
+          </div>
+        </div>
+        <div className="field">
+          <label>Для бенча</label>
+          <div className="panel-actions">
+            <button className={`ghost-tab ${benchOrigin === "own" ? "is-active" : ""}`} type="button" onClick={() => setBenchOrigin("own")}>
+              Наш бенч
+            </button>
+            <button className={`ghost-tab ${benchOrigin === "partner" ? "is-active" : ""}`} type="button" onClick={() => setBenchOrigin("partner")}>
+              Партнёры
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {sourceKind === "text" ? (
+        <textarea className="editor editor--compact" value={textValue} onChange={(event) => setTextValue(event.target.value)} placeholder="Вставь текст вакансии или бенча..." />
+      ) : null}
+      {sourceKind === "url" ? (
+        <input className="standalone-input" value={urlValue} onChange={(event) => setUrlValue(event.target.value)} placeholder="https://..." />
+      ) : null}
+      {sourceKind === "file" ? (
+        <input className="standalone-input" type="file" onChange={(event) => setFileValue(event.target.files?.[0] ?? null)} />
+      ) : null}
+
+      <div className="editor-footer">
+        <button className="btn btn--primary" type="button" disabled={isSubmitting} onClick={submitImport}>
+          Загрузить в базу
+        </button>
+        <button className="btn btn--ghost" type="button" disabled={isSubmitting} onClick={onTelegramVacanciesImport}>
+          Подтянуть вакансии из TG
+        </button>
+        <button className="btn btn--ghost" type="button" disabled={isSubmitting} onClick={onMatchingRebuild}>
+          Пересчитать релевантность
+        </button>
+      </div>
+
+      <div className="form-grid">
+        <Field
+          label="Telegram ID"
+          value={channelForm.telegram_id}
+          onChange={(value) => setChannelForm((prev) => ({ ...prev, telegram_id: value }))}
+          hint="ID канала/чата для коллектора"
+        />
+        <Field
+          label="Название"
+          value={channelForm.title}
+          onChange={(value) => setChannelForm((prev) => ({ ...prev, title: value }))}
+          hint="Как показывать канал в системе"
+        />
+        <Field
+          label="Username"
+          value={channelForm.username}
+          onChange={(value) => setChannelForm((prev) => ({ ...prev, username: value }))}
+          hint="@username, если есть"
+        />
+        <Field
+          label="Тип канала"
+          value={channelForm.source_kind}
+          onChange={(value) => setChannelForm((prev) => ({ ...prev, source_kind: value }))}
+          hint="vacancy/bench/chat"
+        />
+      </div>
+
+      <div className="editor-footer">
+        <button className="btn btn--ghost" type="button" disabled={isSubmitting} onClick={saveChannel}>
+          Сохранить TG-канал
+        </button>
+      </div>
+
+      <div className="compact-list">
+        {telegramChannels.length ? (
+          telegramChannels.map((item) => (
+            <div key={item.telegram_id} className="compact-list__item">
+              <div>
+                <div className="compact-list__title">{item.title}</div>
+                <div className="compact-list__text">
+                  {item.username ? `@${item.username}` : "без username"} • {item.source_kind}
+                </div>
+              </div>
+              <Badge tone={item.source_kind === "vacancy" ? "purple" : item.source_kind === "bench" ? "blue" : "gray"}>
+                {item.source_kind}
+              </Badge>
+            </div>
+          ))
+        ) : (
+          <InlineEmptyState text="Telegram-каналы пока не добавлены." />
+        )}
+      </div>
     </div>
   );
 }

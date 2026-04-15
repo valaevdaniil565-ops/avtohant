@@ -100,11 +100,21 @@ def get_vacancy(engine, vacancy_id: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-def list_specialists(engine, *, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+def list_specialists(engine, *, limit: int = 50, offset: int = 0, bench_scope: str = "all") -> list[dict[str, Any]]:
+    scope_sql = ""
+    if bench_scope == "own":
+        scope_sql = "AND COALESCE(e.is_internal, FALSE) = TRUE"
+    elif bench_scope == "partner":
+        scope_sql = "AND COALESCE(e.is_internal, FALSE) = FALSE"
     query = text(
         _entity_select("specialists", include_internal=True)
         + """
         WHERE e.status <> 'hidden'
+        """
+        + f"""
+        {scope_sql}
+        """
+        + """
         ORDER BY e.updated_at DESC
         LIMIT :limit OFFSET :offset
         """

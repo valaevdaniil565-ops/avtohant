@@ -527,6 +527,7 @@ button:hover {
 
 .filter-input input,
 .field input,
+.standalone-input,
 .editor {
   width: 100%;
   background: #0d0d12;
@@ -539,6 +540,7 @@ button:hover {
 
 :root[data-theme="light"] .filter-input input,
 :root[data-theme="light"] .field input,
+:root[data-theme="light"] .standalone-input,
 :root[data-theme="light"] .editor {
   background: #ffffff;
 }
@@ -706,6 +708,10 @@ button:hover {
   min-height: 260px;
   resize: vertical;
   margin-top: 14px;
+}
+
+.editor--compact {
+  min-height: 180px;
 }
 
 .input-label {
@@ -950,6 +956,10 @@ button:hover {
 .field {
   display: grid;
   gap: 8px;
+}
+
+.standalone-input {
+  margin-top: 6px;
 }
 
 @media (max-width: 1180px) {

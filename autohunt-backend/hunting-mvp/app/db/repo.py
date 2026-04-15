@@ -150,11 +150,13 @@ class Repo:
             INSERT INTO specialists(
               synthetic_id, role, stack, grade, experience_years,
               rate_min, rate_max, currency, location,
+              is_internal,
               description, original_text, embedding, status, expires_at, hired_at
             )
             VALUES (
               CAST(:syn AS varchar), CAST(:role AS text), CAST(:stack AS jsonb), CAST(:grade AS varchar), :exp,
               :rmin, :rmax, COALESCE(CAST(:cur AS varchar), 'RUB'), CAST(:loc AS text),
+              :is_internal,
               CAST(:desc AS text), CAST(:orig AS text),
               CASE WHEN CAST(:emb AS text) IS NULL THEN NULL ELSE CAST(CAST(:emb AS text) AS vector) END,
               CAST(:status AS varchar),
@@ -162,7 +164,8 @@ class Repo:
               CASE WHEN CAST(:status AS varchar)='hired' THEN NOW() ELSE NULL END
             )
             ON CONFLICT(synthetic_id) DO UPDATE
-              SET updated_at = NOW()
+              SET updated_at = NOW(),
+                  is_internal = COALESCE(EXCLUDED.is_internal, specialists.is_internal)
             RETURNING id
             """
         )
@@ -179,6 +182,7 @@ class Repo:
                     "rmax": data.get("rate_max"),
                     "cur": data.get("currency"),
                     "loc": data.get("location"),
+                    "is_internal": data.get("is_internal"),
                     "desc": data.get("description") or None,
                     "orig": original_text,
                     "emb": emb_json,

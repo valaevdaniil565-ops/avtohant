@@ -245,6 +245,63 @@ export async function getBench(params) {
   return getList("/api/specialists", normalizeBench, benchItems, params);
 }
 
+export async function importTextSync(payload) {
+  return request("/api/imports/text-sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function importUrlSync(payload) {
+  return request("/api/imports/url-sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function importFileSync({ file, forcedType, benchOrigin }) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (forcedType) {
+    formData.append("forced_type", forcedType);
+  }
+  if (benchOrigin) {
+    formData.append("bench_origin", benchOrigin);
+  }
+  return request("/api/imports/file-sync", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export async function getTelegramChannels() {
+  return request("/api/admin/telegram/channels");
+}
+
+export async function upsertTelegramChannel(payload) {
+  return request("/api/admin/telegram/channels", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function importTelegramVacancies(params) {
+  return request("/api/admin/telegram/import-vacancies", {
+    method: "POST",
+    params
+  });
+}
+
+export async function rebuildMatching(params) {
+  return request("/api/admin/matching/rebuild", {
+    method: "POST",
+    params
+  });
+}
+
 export async function getInbox(params) {
   return getList("/api/inbox", normalizeInbox, inboxItems, params);
 }
@@ -280,6 +337,13 @@ export async function getHealth() {
 export const api = {
   getVacancies,
   getBench,
+  importTextSync,
+  importUrlSync,
+  importFileSync,
+  getTelegramChannels,
+  upsertTelegramChannel,
+  importTelegramVacancies,
+  rebuildMatching,
   getInbox,
   getLogs,
   getMatches,

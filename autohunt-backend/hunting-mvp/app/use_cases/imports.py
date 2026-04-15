@@ -30,6 +30,7 @@ from app.use_cases.entities import _resolve_own_bench_url
 
 ImportKind = Literal["text", "url", "file", "telegram"]
 ForcedType = Literal["VACANCY", "BENCH"] | None
+BenchOrigin = Literal["own", "partner"] | None
 
 
 @dataclass
@@ -279,6 +280,7 @@ def _process_units(
     ollama: OllamaClient,
     units: list[dict[str, Any]],
     forced_type: ForcedType = None,
+    bench_origin: BenchOrigin = None,
     trace_context: TraceContext | None = None,
 ) -> ImportSummary:
     summary = ImportSummary()
@@ -404,6 +406,10 @@ def _process_units(
             for idx, item in enumerate(items, start=1):
                 is_available = resolve_specialist_is_available(item, raw_unit_text)
                 item["is_available"] = is_available
+                if bench_origin == "own":
+                    item["is_internal"] = True
+                elif bench_origin == "partner":
+                    item["is_internal"] = False
                 status = "active" if is_available else "hired"
                 search_text = build_search_text(item)
                 embedding = ollama.embed(search_text)
@@ -442,8 +448,26 @@ def _process_units(
     return summary
 
 
-def process_text_import(job_id: str, *, engine, repo: Repo, ollama: OllamaClient, text: str, forced_type: ForcedType = None) -> ImportSummary:
-    return _process_units(job_id, "text", engine=engine, repo=repo, ollama=ollama, units=_units_from_text(text), forced_type=forced_type)
+def process_text_import(
+    job_id: str,
+    *,
+    engine,
+    repo: Repo,
+    ollama: OllamaClient,
+    text: str,
+    forced_type: ForcedType = None,
+    bench_origin: BenchOrigin = None,
+) -> ImportSummary:
+    return _process_units(
+        job_id,
+        "text",
+        engine=engine,
+        repo=repo,
+        ollama=ollama,
+        units=_units_from_text(text),
+        forced_type=forced_type,
+        bench_origin=bench_origin,
+    )
 
 
 def process_url_import(
@@ -455,9 +479,19 @@ def process_url_import(
     source_fetcher: MCPSourceFetcherClient,
     url: str,
     forced_type: ForcedType = None,
+    bench_origin: BenchOrigin = None,
 ) -> ImportSummary:
     units, statuses = _units_from_url(url, source_fetcher)
-    summary = _process_units(job_id, "url", engine=engine, repo=repo, ollama=ollama, units=units, forced_type=forced_type)
+    summary = _process_units(
+        job_id,
+        "url",
+        engine=engine,
+        repo=repo,
+        ollama=ollama,
+        units=units,
+        forced_type=forced_type,
+        bench_origin=bench_origin,
+    )
     summary.errors.extend(statuses)
     return summary
 
@@ -472,6 +506,7 @@ def process_file_import(
     mime_type: str,
     data: bytes,
     forced_type: ForcedType = None,
+    bench_origin: BenchOrigin = None,
 ) -> ImportSummary:
     return _process_units(
         job_id,
@@ -481,6 +516,7 @@ def process_file_import(
         ollama=ollama,
         units=_units_from_file(data, file_name=file_name, mime_type=mime_type),
         forced_type=forced_type,
+        bench_origin=bench_origin,
     )
 
 

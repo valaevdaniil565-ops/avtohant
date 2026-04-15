@@ -124,11 +124,13 @@ class MatchListResponse(BaseModel):
 class TextImportRequest(BaseModel):
     text: str
     forced_type: Optional[Literal["VACANCY", "BENCH"]] = None
+    bench_origin: Optional[Literal["own", "partner"]] = None
 
 
 class UrlImportRequest(BaseModel):
     url: str
     forced_type: Optional[Literal["VACANCY", "BENCH"]] = None
+    bench_origin: Optional[Literal["own", "partner"]] = None
 
 
 class HideBySourceRequest(BaseModel):
@@ -152,6 +154,11 @@ class ImportSummaryResponse(BaseModel):
 class ImportJobAcceptedResponse(BaseModel):
     job_id: str
     status: str
+
+
+class ImportImmediateResponse(BaseModel):
+    status: str
+    summary: ImportSummaryResponse
 
 
 class ImportJobStatusResponse(BaseModel):
@@ -289,3 +296,42 @@ class AdminOverviewResponse(BaseModel):
     own_bench: dict[str, Any] = Field(default_factory=dict)
     recent_imports: list[dict[str, Any]] = Field(default_factory=list)
     recent_sources: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TelegramChannelItem(BaseModel):
+    telegram_id: int
+    title: str
+    username: Optional[str] = None
+    source_kind: Literal["chat", "vacancy", "bench"] = "chat"
+    is_active: bool = True
+    last_message_id: int = 0
+    added_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class TelegramChannelUpsertRequest(BaseModel):
+    telegram_id: int
+    title: str
+    username: Optional[str] = None
+    source_kind: Literal["chat", "vacancy", "bench"] = "chat"
+    is_active: bool = True
+
+
+class TelegramChannelListResponse(BaseModel):
+    items: list[TelegramChannelItem]
+
+
+class TelegramImportResponse(BaseModel):
+    status: str
+    selected_messages: int = 0
+    imported_vacancies: int = 0
+    skipped: int = 0
+    hidden: int = 0
+    errors: list[str] = Field(default_factory=list)
+    entity_refs: list[ImportEntityRef] = Field(default_factory=list)
+
+
+class MatchingRebuildResponse(BaseModel):
+    status: str
+    processed_vacancies: int = 0
+    updated_matches: int = 0

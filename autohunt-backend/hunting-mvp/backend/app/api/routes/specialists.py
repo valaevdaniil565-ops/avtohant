@@ -10,8 +10,12 @@ router = APIRouter()
 
 
 @router.get("", response_model=SpecialistListResponse)
-def list_specialists_endpoint(limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0)) -> SpecialistListResponse:
-    items = [SpecialistItem(**normalize_row(row)) for row in list_specialists(get_engine(), limit=limit, offset=offset)]
+def list_specialists_endpoint(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    bench_scope: str = Query(default="all", pattern="^(all|own|partner)$"),
+) -> SpecialistListResponse:
+    items = [SpecialistItem(**normalize_row(row)) for row in list_specialists(get_engine(), limit=limit, offset=offset, bench_scope=bench_scope)]
     return SpecialistListResponse(items=items, total=len(items), limit=limit, offset=offset)
 
 
