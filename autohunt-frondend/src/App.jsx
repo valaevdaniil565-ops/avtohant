@@ -37,6 +37,12 @@ const defaultSettings = {
   ttlLongTerm: "90",
   matchThreshold: "50"
 };
+const initialApiStatus = {
+  state: "checking",
+  title: "Проверяем backend",
+  message: "Frontend пытается подключиться к API и базе данных.",
+  details: ""
+};
 const exampleTexts = {
   vacancy: [
     "Senior Java Developer",
@@ -437,6 +443,7 @@ function App() {
   const [partnerBenchSources, setPartnerBenchSources] = React.useState([]);
   const [ownBenchSourceUrl, setOwnBenchSourceUrl] = React.useState("");
   const [isOwnBenchSyncing, setIsOwnBenchSyncing] = React.useState(false);
+  const [apiStatus, setApiStatus] = React.useState(initialApiStatus);
 
   React.useEffect(() => {
     const onChange = () => setPath(window.location.pathname);
@@ -503,6 +510,62 @@ function App() {
   }, []);
 
   React.useEffect(() => {
+    let isMounted = true;
+    const apiBaseUrl = api.getApiBaseUrl();
+    const apiTarget = apiBaseUrl || "текущий домен frontend";
+
+    api.getHealth()
+      .then((payload) => {
+        if (!isMounted) {
+          return;
+        }
+
+        if (!payload || typeof payload !== "object") {
+          setApiStatus({
+            state: "error",
+            title: "Backend не подключен",
+            message: "API вернул не JSON. Чаще всего Vercel отвечает страницей frontend вместо FastAPI.",
+            details: `API base: ${apiTarget}. Проверьте VITE_API_BASE_URL и сделайте redeploy frontend.`
+          });
+          return;
+        }
+
+        if (payload.database !== "ok") {
+          setApiStatus({
+            state: "warning",
+            title: "Backend отвечает, но база недоступна",
+            message: "FastAPI найден, но PostgreSQL/pgvector не подключен или DATABASE_URL неверный.",
+            details: `API base: ${apiTarget}. Health status: ${payload.status ?? "unknown"}.`
+          });
+          return;
+        }
+
+        setApiStatus({
+          state: "ok",
+          title: "Backend подключен",
+          message: "API и база данных доступны.",
+          details: `API base: ${apiTarget}.`
+        });
+      })
+      .catch((error) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setApiStatus({
+          state: "error",
+          title: "Backend не подключен",
+          message: "Frontend не получает данные из API, поэтому таблицы и счетчики остаются пустыми.",
+          details: `API base: ${apiTarget}. Ошибка: ${error.message}.`
+        });
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
     Object.keys(collectionLoaders).forEach((pageName) => {
       loadCollection(pageName).catch((error) => {
         console.error(`Failed to load ${pageName}:`, error);
@@ -554,6 +617,7 @@ function App() {
     matches: collections.matches.length,
     logs: collections.logs.length
   };
+  const hasLoadedData = Object.values(statsByPage).some((value) => value > 0);
   const ownBenchMatchesCount = sortedMatches.filter((item) => item.source === "own_bench").length;
   const partnerBenchMatchesCount = sortedMatches.filter((item) => item.source === "partner_bench").length;
   const digestSummary = {
@@ -823,6 +887,7 @@ function App() {
         <TopBar
           onClear={clearAllResults}
         />
+        <BackendStatusBanner status={apiStatus} hasLoadedData={hasLoadedData} />
         {current.id === "dashboard" && (
           <DashboardPage
             navigate={navigate}
@@ -941,6 +1006,30 @@ function TopBar({ onClear }) {
         </div>
       </div>
     </header>
+  );
+}
+
+function BackendStatusBanner({ status, hasLoadedData }) {
+  const shouldShowEmptyDataWarning = status.state === "ok" && !hasLoadedData;
+  const visibleStatus = shouldShowEmptyDataWarning
+    ? {
+        state: "warning",
+        title: "Backend подключен, но данных пока нет",
+        message: "База пустая: нужно загрузить вакансии/бенч или запустить синхронизацию источников.",
+        details: status.details
+      }
+    : status;
+
+  if (visibleStatus.state === "ok") {
+    return null;
+  }
+
+  return (
+    <div className={`backend-status backend-status--${visibleStatus.state}`}>
+      <strong>{visibleStatus.title}</strong>
+      <p>{visibleStatus.message}</p>
+      {visibleStatus.details ? <span>{visibleStatus.details}</span> : null}
+    </div>
   );
 }
 

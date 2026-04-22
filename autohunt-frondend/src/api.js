@@ -21,6 +21,10 @@ function resolveApiBaseUrl() {
 const API_BASE_URL = resolveApiBaseUrl();
 const USE_MOCKS_ON_ERROR = import.meta.env.VITE_API_FALLBACK_TO_MOCKS === "true";
 
+export function getApiBaseUrl() {
+  return API_BASE_URL;
+}
+
 function buildUrl(path, params) {
   const base = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
   const url = new URL(base, window.location.origin);
@@ -795,6 +799,7 @@ export const api = {
   importTelegramVacancies,
   rebuildMatching,
   getPartnerBenchSources,
+  getApiBaseUrl,
   getInbox,
   getLogs,
   getMatches,
