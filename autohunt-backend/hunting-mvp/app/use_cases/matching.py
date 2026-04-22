@@ -429,7 +429,7 @@ def _iter_match_texts(value: Any) -> list[str]:
     seen: set[str] = set()
     for raw in raw_values:
         text = str(raw or "").strip()
-        if not text or _looks_like_urlish(text):
+        if not text:
             continue
         for candidate in [text, *re.split(r"[\n,;/|]|(?:\s{2,})", text)]:
             cleaned = str(candidate or "").strip()
@@ -492,7 +492,12 @@ def _coerce_match_entity(entity_or_stack: Any) -> dict[str, Any]:
 def _build_stack_profile(entity_or_stack: Any, *, entity_kind: str = "GENERIC") -> dict[str, list[str]]:
     entity = _coerce_match_entity(entity_or_stack)
     role_text = str(entity.get("role") or "").strip()
+    # Manual imports and partner sheets often keep detailed technologies in the
+    # raw row text, while the normalized stack only says "Backend" or "Mobile".
     stack_texts = _iter_match_texts(entity.get("stack"))
+    stack_texts.extend(_iter_match_texts(entity.get("description")))
+    stack_texts.extend(_iter_match_texts(entity.get("original_text")))
+    stack_texts = _unique_keep_order(stack_texts)
     role_texts = _iter_match_texts(role_text)
     role_profile_hit = detect_primary_catalog_profile(role_text) if role_text else None
     stack_profile_hit = detect_primary_catalog_profile(" ".join(stack_texts)) if stack_texts else None
@@ -562,7 +567,7 @@ def _stack_match_details(required_entity: Any, candidate_entity: Any, *, require
     candidate_meaningful = _meaningful_stack_tokens(candidate_profile)
     meaningful_overlap = sorted(required_meaningful & candidate_meaningful)
     has_explicit_stack = bool(required_meaningful and candidate_meaningful)
-    if required_catalog or candidate_catalog:
+    if required_catalog and candidate_catalog:
         overlap = sorted({required_catalog} & {candidate_catalog} - {None})
         return {
             "passes": bool(required_catalog and candidate_catalog and overlap and (not has_explicit_stack or meaningful_overlap)),
@@ -788,7 +793,7 @@ def search_specialists(engine, query_emb: Optional[list[float]], query_text: str
         sql = text(
             """
             SELECT
-              s.id, s.role, s.stack, s.grade, s.rate_min, s.rate_max, s.currency, s.location, s.description, s.original_text, s.is_internal,
+              s.id, s.role, s.stack::text AS stack, s.grade, s.rate_min, s.rate_max, s.currency, s.location, s.description, s.original_text, s.is_internal,
               0.0 AS sim,
               (
                 SELECT COALESCE(external_url, message_url) FROM sources
@@ -804,7 +809,7 @@ def search_specialists(engine, query_emb: Optional[list[float]], query_text: str
                 LIMIT 1
               ) AS source_display,
               (
-                SELECT source_meta
+                SELECT source_meta::text
                 FROM sources
                 WHERE entity_type='specialist' AND entity_id=s.id
                 ORDER BY created_at DESC
@@ -832,7 +837,7 @@ def search_specialists(engine, query_emb: Optional[list[float]], query_text: str
         sql = text(
             """
             SELECT
-              s.id, s.role, s.stack, s.grade, s.rate_min, s.rate_max, s.currency, s.location, s.description, s.original_text, s.is_internal,
+              s.id, s.role, s.stack::text AS stack, s.grade, s.rate_min, s.rate_max, s.currency, s.location, s.description, s.original_text, s.is_internal,
               GREATEST(0.0, LEAST(1.0, 1 - (s.embedding <=> CAST(:q AS vector)))) AS sim,
               (
                 SELECT COALESCE(external_url, message_url) FROM sources
@@ -848,7 +853,7 @@ def search_specialists(engine, query_emb: Optional[list[float]], query_text: str
                 LIMIT 1
               ) AS source_display,
               (
-                SELECT source_meta
+                SELECT source_meta::text
                 FROM sources
                 WHERE entity_type='specialist' AND entity_id=s.id
                 ORDER BY created_at DESC
@@ -878,7 +883,7 @@ def search_specialists(engine, query_emb: Optional[list[float]], query_text: str
     sql = text(
         """
         SELECT
-          s.id, s.role, s.stack, s.grade, s.rate_min, s.rate_max, s.currency, s.location, s.description, s.original_text, s.is_internal,
+          s.id, s.role, s.stack::text AS stack, s.grade, s.rate_min, s.rate_max, s.currency, s.location, s.description, s.original_text, s.is_internal,
           0.0 AS sim,
           (
             SELECT message_url FROM sources
@@ -894,7 +899,7 @@ def search_specialists(engine, query_emb: Optional[list[float]], query_text: str
             LIMIT 1
           ) AS source_display,
           (
-            SELECT source_meta
+            SELECT source_meta::text
             FROM sources
             WHERE entity_type='specialist' AND entity_id=s.id
             ORDER BY created_at DESC
@@ -931,7 +936,7 @@ def search_vacancies(engine, query_emb: Optional[list[float]], query_text: str, 
         sql = text(
             """
             SELECT
-              v.id, v.role, v.stack, v.grade, v.rate_min, v.rate_max, v.currency, v.location, v.description, v.original_text,
+              v.id, v.role, v.stack::text AS stack, v.grade, v.rate_min, v.rate_max, v.currency, v.location, v.description, v.original_text,
               GREATEST(0.0, LEAST(1.0, 1 - (v.embedding <=> CAST(:q AS vector)))) AS sim,
               (
                 SELECT COALESCE(external_url, message_url) FROM sources
@@ -961,7 +966,7 @@ def search_vacancies(engine, query_emb: Optional[list[float]], query_text: str, 
     sql = text(
         """
         SELECT
-          v.id, v.role, v.stack, v.grade, v.rate_min, v.rate_max, v.currency, v.location, v.description, v.original_text,
+          v.id, v.role, v.stack::text AS stack, v.grade, v.rate_min, v.rate_max, v.currency, v.location, v.description, v.original_text,
           0.0 AS sim,
               (
                 SELECT COALESCE(external_url, message_url) FROM sources
@@ -1182,7 +1187,7 @@ def list_recent_matches(engine, limit: int = 20, *, source_fetcher: MCPSourceFet
           m.created_at,
           v.role AS vacancy_role,
           v.company AS vacancy_company,
-          v.stack AS vacancy_stack,
+          v.stack::text AS vacancy_stack,
           v.grade AS vacancy_grade,
           v.rate_min AS vacancy_rate_min,
           v.rate_max AS vacancy_rate_max,
@@ -1198,7 +1203,7 @@ def list_recent_matches(engine, limit: int = 20, *, source_fetcher: MCPSourceFet
             LIMIT 1
           ) AS vacancy_source_url,
           s.role AS specialist_role,
-          s.stack AS specialist_stack,
+          s.stack::text AS specialist_stack,
           s.grade AS specialist_grade,
           s.rate_min AS specialist_rate_min,
           s.rate_max AS specialist_rate_max,
@@ -1214,7 +1219,7 @@ def list_recent_matches(engine, limit: int = 20, *, source_fetcher: MCPSourceFet
             LIMIT 1
           ) AS specialist_source_url,
           (
-            SELECT src.source_meta
+            SELECT src.source_meta::text
             FROM sources src
             WHERE src.entity_type='specialist' AND src.entity_id=s.id
             ORDER BY src.created_at DESC
@@ -1267,7 +1272,7 @@ def list_active_specialists_for_matching(engine, *, own_bench_url: Optional[str]
     sql = text(
         """
         SELECT
-          s.id, s.role, s.stack, s.grade, s.rate_min, s.rate_max, s.currency, s.location, s.description, s.original_text, s.is_internal,
+          s.id, s.role, s.stack::text AS stack, s.grade, s.rate_min, s.rate_max, s.currency, s.location, s.description, s.original_text, s.is_internal,
           0.0 AS sim,
           (
             SELECT COALESCE(src.external_url, src.message_url)
@@ -1284,7 +1289,7 @@ def list_active_specialists_for_matching(engine, *, own_bench_url: Optional[str]
             LIMIT 1
           ) AS source_display,
           (
-            SELECT src.source_meta
+            SELECT src.source_meta::text
             FROM sources src
             WHERE src.entity_type='specialist' AND src.entity_id=s.id
             ORDER BY src.created_at DESC
@@ -1314,7 +1319,7 @@ def list_active_vacancies_for_matching(engine) -> list[dict[str, Any]]:
     sql = text(
         """
         SELECT
-          v.id, v.role, v.stack, v.grade, v.rate_min, v.rate_max, v.currency, v.location, v.description, v.original_text,
+          v.id, v.role, v.stack::text AS stack, v.grade, v.rate_min, v.rate_max, v.currency, v.location, v.description, v.original_text,
           0.0 AS sim,
           (
             SELECT COALESCE(src.external_url, src.message_url)
@@ -1367,10 +1372,18 @@ def build_manual_query_entity(text_value: str, *, mode: str, rate_value: int | N
             role = _MANUAL_PROFILE_LABELS.get(fallback_primary, fallback_primary)
             profile = {"id": fallback_primary, "role": role}
             stack_terms = [fallback_primary]
+    manual_grade = next(
+        (
+            grade
+            for grade in ("junior", "middle", "senior", "lead")
+            if re.search(rf"\b{grade}\b", text_value, flags=re.IGNORECASE)
+        ),
+        None,
+    )
     entity = {
         "role": manual_role or role or text_value.strip(),
         "stack": stack_terms or [text_value],
-        "grade": None,
+        "grade": manual_grade.title() if manual_grade else None,
         "location": None,
         "rate_min": int(rate_value) if rate_value is not None else None,
         "rate_max": int(rate_value) if rate_value is not None else None,

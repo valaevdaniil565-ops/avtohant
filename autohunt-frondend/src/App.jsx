@@ -116,6 +116,69 @@ function extractUrls(value) {
   return Array.from(String(value ?? "").matchAll(/https?:\/\/\S+/gi)).map((match) => match[0]);
 }
 
+function normalizeComparableValue(value) {
+  const text = String(value ?? "").trim();
+  return text && text !== "—" ? text : "";
+}
+
+function buildMatchExplanation(match) {
+  const vacancyStack = match.vacancy.stack ?? [];
+  const candidateStack = match.candidate.stack ?? [];
+  const candidateStackByLower = new Map(candidateStack.map((item) => [normalizeText(item), item]));
+  const commonStack = vacancyStack
+    .filter((item) => candidateStackByLower.has(normalizeText(item)))
+    .map((item) => candidateStackByLower.get(normalizeText(item)) ?? item)
+    .slice(0, 5);
+  const vacancyGrade = normalizeComparableValue(match.vacancy.grade);
+  const candidateGrade = normalizeComparableValue(match.candidate.grade);
+  const vacancyRate = normalizeComparableValue(match.vacancy.rate);
+  const candidateRate = normalizeComparableValue(match.candidate.rate);
+  const vacancyLocation = normalizeComparableValue(match.vacancy.location);
+  const candidateLocation = normalizeComparableValue(match.candidate.location);
+  const details = [];
+
+  details.push({
+    label: "Стек",
+    value: commonStack.length
+      ? `совпали ${commonStack.join(", ")}`
+      : "точного пересечения по тегам не найдено"
+  });
+
+  if (vacancyGrade || candidateGrade) {
+    details.push({
+      label: "Грейд",
+      value: vacancyGrade && candidateGrade
+        ? (normalizeText(vacancyGrade) === normalizeText(candidateGrade)
+            ? `оба ${candidateGrade}`
+            : `вакансия ${vacancyGrade}, специалист ${candidateGrade}`)
+        : `указан ${vacancyGrade || candidateGrade}`
+    });
+  }
+
+  if (vacancyRate || candidateRate) {
+    details.push({
+      label: "Ставка",
+      value: [vacancyRate ? `вакансия ${vacancyRate}` : "", candidateRate ? `специалист ${candidateRate}` : ""].filter(Boolean).join("; ")
+    });
+  }
+
+  if (vacancyLocation || candidateLocation) {
+    details.push({
+      label: "Формат/локация",
+      value: [vacancyLocation ? `вакансия ${vacancyLocation}` : "", candidateLocation ? `специалист ${candidateLocation}` : ""].filter(Boolean).join("; ")
+    });
+  }
+
+  details.push({
+    label: "Приоритет",
+    value: match.source === "own_bench"
+      ? "сначала проверен наш бенч"
+      : "показан партнерский бенч после проверки нашего"
+  });
+
+  return details;
+}
+
 function isTelegramUrl(value) {
   return /https?:\/\/t\.me\//i.test(String(value ?? "").trim());
 }
@@ -537,12 +600,14 @@ function App() {
       setRunResult(enrichManualRunResultWithLinks(result, runMode, sourceCollections));
     } catch (error) {
       console.error("Failed to run manual match:", error);
-      setRunResult({
-        title: runMode === "bench" ? "Топ-10 вакансий для специалиста" : "Топ-10 специалистов под вакансию",
-        description: "Не удалось выполнить ручной прогон через backend.",
-        items: [],
-        sections: []
-      });
+      setRunResult(enrichManualRunResultWithLinks(
+        {
+          ...buildManualRunResult(runText, runMode, sourceCollections),
+          description: "Backend ручного прогона сейчас недоступен, поэтому показан локальный быстрый подбор по загруженным данным фронта."
+        },
+        runMode,
+        sourceCollections
+      ));
     }
   };
 
@@ -1243,6 +1308,7 @@ function MatchesPage({ items, scope, onScopeChange, sortOrder, onSortChange, onR
                   stack={match.vacancy.stack}
                   grade={match.vacancy.grade}
                   rate={match.vacancy.rate}
+                  location={match.vacancy.location}
                   sourceUrl={match.vacancy.sourceUrl}
                   sourceLabel="Открыть вакансию"
                 />
@@ -1261,6 +1327,8 @@ function MatchesPage({ items, scope, onScopeChange, sortOrder, onSortChange, onR
                   sourceLabel="Открыть CV / профиль"
                 />
               </div>
+
+              <MatchExplanation details={buildMatchExplanation(match)} />
 
               <div className="match-card__footer">
                 <span>{match.date}</span>
@@ -1831,6 +1899,25 @@ function CompareCard({ title, name, subtitle, stack, grade, rate, location, iden
           </a>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function MatchExplanation({ details }) {
+  return (
+    <div className="match-explanation">
+      <div>
+        <div className="match-explanation__eyebrow">Краткий бриф</div>
+        <strong>Почему система считает пару релевантной</strong>
+      </div>
+      <div className="match-explanation__grid">
+        {details.map((detail) => (
+          <div key={detail.label} className="match-explanation__item">
+            <span>{detail.label}</span>
+            <p>{detail.value}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

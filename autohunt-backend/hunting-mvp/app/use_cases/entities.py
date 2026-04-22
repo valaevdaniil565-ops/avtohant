@@ -91,7 +91,7 @@ def _entity_select(table: str, *, include_company: bool = False, include_interna
         SELECT
           e.id,
           e.role,
-          e.stack,
+          e.stack::text AS stack,
           e.grade,
           e.experience_years,
           e.rate_min,
@@ -121,7 +121,7 @@ def _entity_select(table: str, *, include_company: bool = False, include_interna
             LIMIT 1
           ) AS source_display,
           (
-            SELECT s.source_meta
+            SELECT s.source_meta::text
             FROM sources s
             WHERE s.entity_type = :entity_type AND s.entity_id = e.id
             ORDER BY s.created_at DESC
@@ -225,7 +225,7 @@ def list_sources_for_entity(engine, entity_type: str, entity_id: str) -> list[di
           external_locator,
           source_type,
           raw_text,
-          source_meta,
+          source_meta::text AS source_meta,
           created_at
         FROM sources
         WHERE entity_type = :entity_type

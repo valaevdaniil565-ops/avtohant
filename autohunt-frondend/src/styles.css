@@ -677,6 +677,55 @@ button:hover {
   font-size: 1.4rem;
 }
 
+.match-explanation {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.28fr) 1fr;
+  gap: 18px;
+  align-items: start;
+  margin: -2px 0 18px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(138, 73, 255, 0.18);
+  background:
+    radial-gradient(circle at 0 0, rgba(138, 73, 255, 0.13), transparent 32%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.match-explanation__eyebrow {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.match-explanation__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.match-explanation__item {
+  min-height: 82px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+}
+
+.match-explanation__item span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  margin-bottom: 6px;
+}
+
+.match-explanation__item p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
 .compare-card {
   padding: 18px;
   border-radius: 18px;
@@ -686,6 +735,16 @@ button:hover {
 
 :root[data-theme="light"] .compare-card {
   background: rgba(103, 112, 137, 0.06);
+}
+
+:root[data-theme="light"] .match-explanation {
+  background:
+    radial-gradient(circle at 0 0, rgba(138, 73, 255, 0.11), transparent 34%),
+    rgba(255, 255, 255, 0.68);
+}
+
+:root[data-theme="light"] .match-explanation__item {
+  background: rgba(103, 112, 137, 0.05);
 }
 
 .compare-card__label {
@@ -1010,7 +1069,9 @@ button:hover {
   .split-grid,
   .theme-switch,
   .form-grid,
-  .match-card__content {
+  .match-card__content,
+  .match-explanation,
+  .match-explanation__grid {
     grid-template-columns: 1fr;
   }
 

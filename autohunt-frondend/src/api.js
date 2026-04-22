@@ -249,6 +249,8 @@ function deriveVacancyOwner(item) {
 
 function deriveSpecialistName(item) {
   return firstNonEmptyString(
+    item.source_meta?.structured_fields?.contact,
+    item.source_meta?.row_map?.contact,
     item.name,
     item.candidate,
     item.specialist,
@@ -268,6 +270,29 @@ function deriveSpecialistRole(item) {
     toArray(item.stack ?? item.skills ?? item.tech_stack)[0],
     "—"
   );
+}
+
+function deriveSpecialistGrade(item) {
+  const explicitGrade = firstNonEmptyString(
+    item.grade,
+    item.level,
+    item.source_meta?.structured_fields?.grade,
+    item.source_meta?.row_map?.grade
+  );
+  if (explicitGrade) {
+    return explicitGrade;
+  }
+
+  const structuredFields = item.source_meta?.structured_fields ?? {};
+  const rateFields = [
+    structuredFields.developer_middle_rate,
+    structuredFields.analyst_middle_rate,
+    structuredFields.tester_middle_rate,
+    structuredFields.middle_rate,
+    structuredFields.rate
+  ].map((value) => toReadableText(value)).join(" ");
+
+  return /middle/i.test(rateFields) || rateFields.trim() ? "Middle" : "—";
 }
 
 function extractLabeledValue(text, labels) {
@@ -452,7 +477,7 @@ function normalizeBench(item) {
   return attachMetadata([
     deriveSpecialistName(item),
     deriveSpecialistRole(item),
-    firstNonEmptyString(item.grade, item.level, "—"),
+    deriveSpecialistGrade(item),
     firstNonEmptyString(item.status, "Активно")
   ], item);
 }
@@ -539,6 +564,7 @@ function normalizeMatch(item) {
         stack: toArray(item.vacancy?.stack ?? item.vacancy_stack ?? item.vacancy_skills),
         grade: firstNonEmptyString(item.vacancy?.grade, item.vacancy_grade, "—"),
         rate: firstNonEmptyString(vacancyRate, "—"),
+        location: firstNonEmptyString(item.vacancy?.location, item.vacancy_location, "—"),
         sourceUrl: item.vacancy?.sourceUrl ?? item.vacancy?.source_url ?? item.vacancy_source_url ?? item.source_url ?? null
       },
       candidate: {
@@ -568,7 +594,7 @@ function normalizeMatch(item) {
   return {
     score: 0,
     title: "Автоматический мэтчинг",
-    vacancy: { company: "—", stack: [], grade: "—", rate: "—" },
+    vacancy: { company: "—", stack: [], grade: "—", rate: "—", location: "—" },
     candidate: { name: "—", role: "—", stack: [], grade: "—", rate: "—", location: "—", identityHint: "", benchReference: "" },
     status: "На проверке",
     date: "—",
@@ -656,6 +682,45 @@ export async function rebuildMatching(params) {
   });
 }
 
+function normalizeManualRunItem(item) {
+  return {
+    ...item,
+    title: firstNonEmptyString(item.title, "—"),
+    display_name: firstNonEmptyString(item.display_name, ""),
+    role_label: firstNonEmptyString(item.role_label, ""),
+    subtitle: firstNonEmptyString(item.subtitle, ""),
+    meta: firstNonEmptyString(item.meta, ""),
+    identity_hint: firstNonEmptyString(item.identity_hint, ""),
+    reference: firstNonEmptyString(item.reference, ""),
+    kind_label: firstNonEmptyString(item.kind_label, "Результат"),
+    source_bucket_label: firstNonEmptyString(item.source_bucket_label, ""),
+    tags: toArray(item.tags),
+    overlap: toArray(item.overlap),
+    score: normalizeMatchScore(item.score)
+  };
+}
+
+function normalizeManualRunResponse(payload) {
+  const items = extractItems(payload).map(normalizeManualRunItem);
+  const sections = Array.isArray(payload?.sections)
+    ? payload.sections.map((section) => ({
+        ...section,
+        title: firstNonEmptyString(section.title, "Результаты"),
+        empty_text: firstNonEmptyString(section.empty_text, "Совпадений нет"),
+        items: extractItems(section).map(normalizeManualRunItem)
+      }))
+    : [];
+
+  return {
+    ...payload,
+    title: firstNonEmptyString(payload?.title, "Ручной прогон"),
+    description: firstNonEmptyString(payload?.description, ""),
+    matched_profile: firstNonEmptyString(payload?.matched_profile, ""),
+    items,
+    sections
+  };
+}
+
 export async function getPartnerBenchSources() {
   return request("/api/admin/partner-bench-sources");
 }
@@ -693,11 +758,12 @@ export async function getHealth() {
 }
 
 export async function runManualMatch(payload) {
-  return request("/api/manual-run", {
+  const result = await request("/api/manual-run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   });
+  return normalizeManualRunResponse(result);
 }
 
 export async function getSettings() {
