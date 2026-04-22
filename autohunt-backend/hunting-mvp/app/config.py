@@ -43,9 +43,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    DATABASE_URL: str
+    DATABASE_URL: str = "postgresql+psycopg://hunting:hunting@127.0.0.1:5432/hunting"
 
-    BOT_TOKEN: str
+    BOT_TOKEN: str = ""
     MANAGER_CHAT_IDS: str | None = None
 
     OLLAMA_HOST: str = "http://localhost:11434"

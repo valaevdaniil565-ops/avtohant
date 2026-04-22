@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import os
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,8 @@ from backend.app.api.router import api_router
 from backend.app.core.config import get_backend_settings
 from backend.app.db.session import bootstrap_db, get_engine
 
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CORS_ORIGINS = [
     "http://localhost:5173",
@@ -32,11 +35,14 @@ def get_cors_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    bootstrap_db()
-    engine = get_engine()
-    ensure_jobs_table(engine)
-    ensure_app_settings_table(engine)
-    ensure_audit_log_table(engine)
+    try:
+        bootstrap_db()
+        engine = get_engine()
+        ensure_jobs_table(engine)
+        ensure_app_settings_table(engine)
+        ensure_audit_log_table(engine)
+    except Exception:
+        logger.exception("Backend started without database bootstrap. Check DATABASE_URL and Postgres availability.")
     yield
 
 
