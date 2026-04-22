@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +10,24 @@ from app.use_cases.jobs import ensure_jobs_table
 from backend.app.api.router import api_router
 from backend.app.core.config import get_backend_settings
 from backend.app.db.session import bootstrap_db, get_engine
+
+
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+    "http://localhost:4174",
+    "http://127.0.0.1:4174",
+    "http://localhost:4175",
+    "http://127.0.0.1:4175",
+]
+
+
+def get_cors_origins() -> list[str]:
+    configured = os.getenv("BACKEND_CORS_ORIGINS", "")
+    extra_origins = [origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()]
+    return [*DEFAULT_CORS_ORIGINS, *extra_origins]
 
 
 @asynccontextmanager
@@ -34,16 +53,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:4173",
-            "http://127.0.0.1:4173",
-            "http://localhost:4174",
-            "http://127.0.0.1:4174",
-            "http://localhost:4175",
-            "http://127.0.0.1:4175",
-        ],
+        allow_origins=get_cors_origins(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
