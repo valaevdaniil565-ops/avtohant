@@ -1,0 +1,11 @@
+{
+  "installCommand": "cd autohunt-frondend && npm ci",
+  "buildCommand": "cd autohunt-frondend && npm run build",
+  "outputDirectory": "autohunt-frondend/dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
