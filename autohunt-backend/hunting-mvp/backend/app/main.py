@@ -33,6 +33,10 @@ def get_cors_origins() -> list[str]:
     return [*DEFAULT_CORS_ORIGINS, *extra_origins]
 
 
+def get_cors_origin_regex() -> str:
+    return os.getenv("BACKEND_CORS_ORIGIN_REGEX", r"https://.*\.vercel\.app").strip()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     try:
@@ -60,6 +64,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=get_cors_origins(),
+        allow_origin_regex=get_cors_origin_regex(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
